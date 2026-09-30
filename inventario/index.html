@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Giacenza</title>
+<style>
+:root{--bg:#faf8f3;--fg:#222;--muted:#777;--line:#ddd6c6;--acc:#2f5d50;--warn:#a33;--card:#fff}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+header{padding:12px 16px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}
+h1{font-size:1.15rem;margin:0 0 8px}
+.bar{display:flex;gap:8px;flex-wrap:wrap}
+input,select,button{font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+input[type=search]{flex:1;min-width:140px}
+button{cursor:pointer}
+button.p{background:var(--acc);color:#fff;border-color:var(--acc)}
+button.d{color:var(--warn)}
+main{padding:12px 16px;max-width:900px;margin:auto}
+.row{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.row .t{flex:1;min-width:0}
+.row .t b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .t small{color:var(--muted)}
+.q{font-size:1.4rem;font-weight:700;min-width:2.2em;text-align:center}
+.q.z{color:var(--warn)}
+.adj button{padding:8px 12px}
+.empty{color:var(--muted);text-align:center;padding:32px 0}
+dialog{border:1px solid var(--line);border-radius:12px;max-width:440px;width:calc(100% - 24px);padding:16px}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+label{display:block;font-size:.85rem;color:var(--muted);margin-top:8px}
+dialog input,dialog select{width:100%}
+.g2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.acts{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+footer{padding:16px;text-align:center;color:var(--muted);font-size:.8rem}
+#msg{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:8px 14px;border-radius:8px;display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Giacenza</h1>
+  <div class="bar">
+    <input type="search" id="q" placeholder="Cerca testata, numero, distributore…">
+    <button class="p" id="add">+ Nuovo</button>
+    <button id="menu">Dati ▾</button>
+  </div>
+</header>
+<main>
+  <div id="sum" class="empty" style="padding:0 0 8px;text-align:left"></div>
+  <div id="list"></div>
+</main>
+<footer>I dati restano su questo dispositivo. Usa «Dati» per esportare una copia di sicurezza.</footer>
+
+<dialog id="dlg">
+  <form method="dialog" id="f">
+    <b id="dt">Articolo</b>
+    <label>Testata *<input name="testata" required></label>
+    <div class="g2" style="grid-template-columns:1fr 1fr">
+      <label>Tipo<select name="tipo"></select></label>
+      <label>Numero<input name="numero"></label>
+    </div>
+    <div class="g2" style="grid-template-columns:1fr 1fr">
+      <label>Distributore<input name="distributore"></label>
+      <label>Data di copertina<input name="dataCopertina" type="date"></label>
+    </div>
+    <div class="g2">
+      <label>Ricevuti<input name="ricevuti" type="number" min="0" step="1" value="0"></label>
+      <label>Venduti<input name="venduti" type="number" min="0" step="1" value="0"></label>
+      <label>Resi<input name="resi" type="number" min="0" step="1" value="0"></label>
+    </div>
+    <div class="g2" style="grid-template-columns:1fr 1fr">
+      <label>Prezzo acquisto €<input name="prezzoAcquisto" type="number" min="0" step="0.01"></label>
+      <label>Prezzo vendita €<input name="prezzoVendita" type="number" min="0" step="0.01"></label>
+    </div>
+    <div class="acts">
+      <button type="button" class="d" id="del">Elimina</button>
+      <button type="button" id="cancel">Annulla</button>
+      <button class="p" value="ok">Salva</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dm">
+  <b>Dati</b>
+  <div class="acts" style="flex-direction:column;align-items:stretch">
+    <button id="xj">Esporta copia di sicurezza (JSON)</button>
+    <button id="xc">Esporta giacenza (CSV per Excel)</button>
+    <button id="im">Ripristina da copia di sicurezza…</button>
+    <button id="dmc">Chiudi</button>
+  </div>
+  <input type="file" id="file" accept=".json,application/json" hidden>
+</dialog>
+<div id="msg"></div>
+
+<script>
+"use strict";
+const KEY = "edicola.inventario.v1";
+const TIPI = ["Quotidiano","Periodico","Collezionabile","Gadget","Cartoleria","Libro","Gratta e vinci","Biglietto","Altro"];
+const $ = s => document.querySelector(s);
+
+// ---- storage (localStorage, on this device only) ----
+let db = load();
+function load(){
+  try{
+    const r = JSON.parse(localStorage.getItem(KEY));
+    if(r && Array.isArray(r.articoli)) return r;
+  }catch(e){}
+  return {versione:1, articoli:[]};
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(db)); }
+  catch(e){ toast("Impossibile salvare: spazio esaurito o archivio bloccato. Esporta subito una copia."); }
+}
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const giac = a => (a.ricevuti||0) - (a.venduti||0) - (a.resi||0);
+const esc = s => String(s??"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function toast(t){ const m=$("#msg"); m.textContent=t; m.style.display="block"; clearTimeout(toast.t); toast.t=setTimeout(()=>m.style.display="none",3500); }
+
+// ---- list ----
+function render(){
+  const q = $("#q").value.trim().toLowerCase();
+  const items = db.articoli
+    .filter(a => !q || [a.testata,a.numero,a.distributore,a.tipo].join(" ").toLowerCase().includes(q))
+    .sort((a,b) => (a.testata||"").localeCompare(b.testata||"","it") || String(b.dataCopertina||"").localeCompare(String(a.dataCopertina||"")));
+  const tot = items.reduce((s,a)=>s+Math.max(giac(a),0),0);
+  $("#sum").textContent = `${items.length} articoli · ${tot} pezzi in giacenza`;
+  $("#list").innerHTML = items.length ? items.map(a => {
+    const g = giac(a);
+    const sub = [a.tipo, a.numero && "n. "+a.numero, a.dataCopertina && a.dataCopertina.split("-").reverse().join("/"), a.distributore].filter(Boolean).join(" · ");
+    return `<div class="row" data-id="${a.id}">
+      <div class="t"><b>${esc(a.testata)}</b><small>${esc(sub)}</small></div>
+      <div class="adj"><button data-d="-1" aria-label="Meno">−</button></div>
+      <div class="q ${g<=0?"z":""}">${g}</div>
+      <div class="adj"><button data-d="1" aria-label="Più">+</button></div>
+      <button data-edit>Modifica</button>
+    </div>`;
+  }).join("") : `<div class="empty">${db.articoli.length ? "Nessun risultato." : "Nessun articolo. Premi «+ Nuovo» per iniziare."}</div>`;
+}
+$("#q").addEventListener("input", render);
+$("#list").addEventListener("click", e => {
+  const row = e.target.closest(".row"); if(!row) return;
+  const a = db.articoli.find(x => x.id === row.dataset.id); if(!a) return;
+  if(e.target.dataset.d){
+    // quick correction of stock: adjust "ricevuti" so that giacenza changes by ±1 (never below 0 stock)
+    const d = +e.target.dataset.d;
+    if(d < 0 && giac(a) <= 0) return;
+    if(d < 0) a.venduti = (a.venduti||0) + 1; else a.ricevuti = (a.ricevuti||0) + 1;
+    save(); render();
+  } else if(e.target.hasAttribute("data-edit")) openEdit(a);
+});
+
+// ---- edit dialog ----
+const f = $("#f"); let editing = null;
+f.tipo.innerHTML = TIPI.map(t=>`<option>${t}</option>`).join("");
+function openEdit(a){
+  editing = a;
+  $("#dt").textContent = a ? "Modifica articolo" : "Nuovo articolo";
+  $("#del").style.display = a ? "" : "none";
+  const v = a || {tipo:TIPI[0],ricevuti:0,venduti:0,resi:0};
+  for(const el of f.elements) if(el.name) el.value = v[el.name] ?? (el.type==="number" && /^(ricevuti|venduti|resi)$/.test(el.name) ? 0 : "");
+  $("#dlg").showModal();
+}
+$("#add").onclick = () => openEdit(null);
+$("#cancel").onclick = () => $("#dlg").close();
+$("#del").onclick = () => {
+  if(editing && confirm(`Eliminare «${editing.testata}»?`)){
+    db.articoli = db.articoli.filter(x => x !== editing);
+    save(); render(); $("#dlg").close();
+  }
+};
+f.addEventListener("submit", e => {
+  if(e.submitter?.value !== "ok") return;
+  const n = k => Math.max(0, parseInt(f[k].value,10) || 0);
+  const p = k => f[k].value === "" ? null : Math.max(0, parseFloat(f[k].value) || 0);
+  const rec = {
+    id: editing?.id || uid(),
+    testata: f.testata.value.trim(), tipo: f.tipo.value, distributore: f.distributore.value.trim(),
+    numero: f.numero.value.trim(), dataCopertina: f.dataCopertina.value,
+    ricevuti:n("ricevuti"), venduti:n("venduti"), resi:n("resi"),
+    prezzoAcquisto:p("prezzoAcquisto"), prezzoVendita:p("prezzoVendita")
+  };
+  if(editing) Object.assign(editing, rec); else db.articoli.push(rec);
+  save(); render();
+});
+
+// ---- export / import ----
+function download(name, text, mime){
+  const url = URL.createObjectURL(new Blob([text], {type:mime}));
+  const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+const today = () => new Date().toISOString().slice(0,10);
+$("#menu").onclick = () => $("#dm").showModal();
+$("#dmc").onclick = () => $("#dm").close();
+$("#xj").onclick = () => { download(`giacenza-backup-${today()}.json`, JSON.stringify(db,null,2), "application/json"); toast("Copia di sicurezza esportata."); };
+$("#xc").onclick = () => {
+  const cols = ["testata","tipo","numero","dataCopertina","distributore","ricevuti","venduti","resi","giacenza","prezzoAcquisto","prezzoVendita"];
+  const cell = v => { v = v==null ? "" : String(v); if(/^[=+\-@]/.test(v)) v = "'"+v; return /[;"\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v; };
+  const lines = [cols.join(";")].concat(db.articoli.map(a => cols.map(c => cell(c==="giacenza" ? giac(a) : (typeof a[c]==="number" && c.startsWith("prezzo") ? String(a[c]).replace(".",",") : a[c]))).join(";")));
+  download(`giacenza-${today()}.csv`, "﻿"+lines.join("\r\n"), "text/csv;charset=utf-8");
+  toast("CSV esportato.");
+};
+$("#im").onclick = () => $("#file").click();
+$("#file").onchange = async e => {
+  const file = e.target.files[0]; e.target.value = ""; if(!file) return;
+  try{
+    const r = JSON.parse(await file.text());
+    if(!r || !Array.isArray(r.articoli)) throw 0;
+    if(!confirm(`Sostituire i dati attuali (${db.articoli.length} articoli) con la copia (${r.articoli.length} articoli)?`)) return;
+    db = {versione:1, articoli:r.articoli.map(a => ({...a, id:a.id||uid()}))};
+    save(); render(); $("#dm").close(); toast("Dati ripristinati.");
+  }catch(_){ toast("File non valido."); }
+};
+
+if(navigator.storage?.persist) navigator.storage.persist().catch(()=>{});
+render();
+</script>
+</body>
+</html>
