@@ -289,6 +289,10 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
 (function(){
 "use strict";
 var CFG = window.EDICOLA_CONFIG;
+if(!CFG){
+  document.body.innerHTML='<div style="font-family:system-ui,sans-serif;max-width:480px;margin:18vh auto;padding:24px;text-align:center;color:#3A2E28"><h2>File mancante</h2><p style="margin-top:10px">Non trovo <b>config.js</b>. Tieni <b>index.html</b>, <b>config.js</b>, <b>logo.png</b> e <b>viridian-logo.png</b> nella stessa cartella, poi ricarica la pagina.</p></div>';
+  return;
+}
 var $ = function(s){ return document.querySelector(s); };
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
 var eur = new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'});
