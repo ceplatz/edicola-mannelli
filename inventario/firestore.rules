@@ -42,9 +42,10 @@ service cloud.firestore {
       allow write: if titolare();
     }
 
-    // Registro movimenti: si può solo aggiungere. Mai modificare né cancellare.
+    // Registro movimenti: lo legge SOLO il titolare. Si può solo aggiungere
+    // (anche dal personale quando sposta merce). Mai modificare né cancellare.
     match /movimenti/{id} {
-      allow read: if titolare() || personale();
+      allow read: if titolare();
       allow create: if (titolare() || personale())
         && request.resource.data.keys().hasOnly(
              ['prodottoId', 'prodottoNome', 'codice', 'da', 'a', 'qta',

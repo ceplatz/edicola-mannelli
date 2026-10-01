@@ -20,7 +20,8 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 
 - [x] Staff + PIN: owner-only Impostazioni → Personale (add / remove / change 4-digit PIN). PIN stored as salted PBKDF2 hash.
 - [x] Sposta: either direction (storage <-> shop), staff pick name + enter PIN; owner needs no PIN. Staff can ONLY transfer (rules keep the total constant, never below 0).
-- [x] Registro movimenti: append-only, newest first, filter by product/person.
+- [x] Registro movimenti: append-only, newest first, filter by product/person. OWNER-ONLY (staff have no tile and the rules deny them reading it; their moves are still recorded).
+- [x] Staff scope (decided Oct 1): search, view, and Sposta only. No adding/editing products, no log.
 - [x] Firestore rules tested on the real emulator (30 checks). App flow tested with an in-memory stand-in (19 checks).
 
 ## 1. Look and feel

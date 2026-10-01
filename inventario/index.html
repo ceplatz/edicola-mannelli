@@ -466,8 +466,8 @@ function buildTiles(){
   var t=[];
   if(role==='titolare') t.push({e:'➕',n:'Nuovo prodotto',d:'Aggiungi un articolo',act:function(){ openForm(null); }});
   t.push({e:'🔁',n:'Sposta',d:'Tra magazzino e negozio',act:function(){ openMove(null); }});
-  t.push({e:'📋',n:'Registro movimenti',d:'Chi ha spostato cosa e quando',act:openLog});
   if(role==='titolare'){
+    t.push({e:'📋',n:'Registro movimenti',d:'Chi ha spostato cosa e quando',act:openLog});
     t.push({e:'📊',n:'Report',d:'Valore, margini, più venduti',soon:true,own:true});
     t.push({e:'🧾',n:'Fatture',d:'Fatture e ricevute scansionate',soon:true,own:true});
     t.push({e:'⚙️',n:'Impostazioni',d:'Personale e PIN',act:openSettings});
