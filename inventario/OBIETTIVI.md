@@ -7,6 +7,13 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - Visual design identical to Verdi POS (splash, login, owner toggle); only colours, logo, name and language (Italian) change.
 - Firebase project must be NEW and separate from Verdi's.
 
+## Answers received (Oct 1)
+- Firebase project created (config not yet shared with me).
+- Owner login: Proprietario@EdicolaMannelli.com. Language: Italian only.
+- Codes: product code (a number) + retailer code + custom code, plus an optional barcode field; camera scanning fills/looks up the barcode. All four searchable.
+- Every item exists in BOTH shop and storage (two quantities); staff move a few at a time from storage to shop.
+- Staff see the sale price only (no purchase price, margins or totals).
+
 ## DONE
 - [x] Local-only Giacenza prototype (`inventario/index.html`, localStorage, JSON/CSV export + restore). Will be superseded by the Firebase version.
 
@@ -14,18 +21,18 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - [ ] Start-up: Viridian black splash (copied from Verdi) → Edicola Mannelli splash → login
 - [ ] Viridian splash as a single on/off setting (for handover)
 - [ ] Login identical to Verdi: staff = password only, owner = email + password toggle at the bottom
-- [ ] Owner address: TBC (edicolaminnelli.com?)
+- [x] Owner address: Proprietario@EdicolaMannelli.com
 - [ ] Top banner after login: Duomo logo + location, like the Edicola POS
 
 ## 2. Access
 - [ ] Two roles: owner (full) / staff (limited), enforced in Firestore/Storage rules, not just hidden in the UI
-- [ ] Open: what staff may see/edit (purchase prices? delete? edit prices?)
+- [x] Staff see sale price only. Still open: may staff edit/add products or delete? (assumed: no)
 
 ## 3. Products
 - [ ] Prominent search bar at the top; searches name + product code + retailer code + custom code
 - [ ] Product entry page: name, photo, product code, retailer code, custom code, purchase price, sale price, quantities, location
-- [ ] Barcode scan by camera, typed entry as fallback (TBC: is product code the EAN?)
-- [ ] Location model TBC: separate quantities per place (storage / shop) — recommended
+- [ ] Barcode scan by camera, typed entry as fallback
+- [x] Location model decided: separate quantities, shop + storage, for every item
 
 ## 4. Stock movements
 - [ ] Move stock storage → shop, staff picks their name from a list
