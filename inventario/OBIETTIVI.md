@@ -18,6 +18,11 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - [x] Local-only prototype (replaced by the Firebase app; still in git history).
 - [x] Firebase app v1: splash sequence, login (Firebase Auth), banner, search, tiles, product add/edit/view (Firestore), camera barcode scan, owner-only purchase price. `config.js` + `firestore.rules`. Tested with an in-memory Firebase stand-in; NOT yet tested against the real project or on a real camera.
 
+- [x] Staff + PIN: owner-only Impostazioni → Personale (add / remove / change 4-digit PIN). PIN stored as salted PBKDF2 hash.
+- [x] Sposta: either direction (storage <-> shop), staff pick name + enter PIN; owner needs no PIN. Staff can ONLY transfer (rules keep the total constant, never below 0).
+- [x] Registro movimenti: append-only, newest first, filter by product/person.
+- [x] Firestore rules tested on the real emulator (30 checks). App flow tested with an in-memory stand-in (19 checks).
+
 ## 1. Look and feel
 - [x] Start-up: Viridian black splash (copied from Verdi) → Edicola Mannelli splash → login
 - [x] Viridian splash as a single on/off setting (`mostraSplashViridian` in config.js)
@@ -36,10 +41,15 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - [x] Location model decided: separate quantities, shop + storage, for every item
 
 ## 4. Stock movements
-- [ ] Move stock storage → shop, staff picks their name from a list
-- [ ] Movement log: who, what, how many, from → to, date and time (server time), append-only
+- [x] Move stock both directions, staff picks their name + PIN
+- [x] Movement log: who, what, how many, from → to, date and time (server time), append-only
 - [ ] Every stock decrease records a reason: sold / returned to distributor / damaged-lost / correction. Only "sold" counts as a sale in reports
-- [ ] Open: per-person PIN instead of shared staff password, so the log can't be faked
+- [x] Per-person PIN (limit: stops colleagues picking each other's name; not proof against a determined technical user — server-side check would need Cloud Functions)
+
+## 4b. Import from the old Edicola POS (to do)
+- Old catalog (root `index.html`, `PRODUCTS`): 805 items; fields id, name, category, sale price, VAT, emoji; 25 have a photo, 25 have `sizes`. NO codes, quantities or purchase prices. 39 duplicate names.
+- Plan: export to a CSV she can fill in (codes, quantities, cost), then an owner-only "Importa" in Impostazioni (preview, batches of 500). Needs new fields: categoria, iva.
+- Open: her scanned images/codes — need a few samples to see how codes are attached.
 
 ## 5. Documents (nice to have)
 - [ ] Upload scanned invoices and purchase receipts (photo or PDF), tagged with supplier, date, amount

@@ -158,6 +158,42 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
 #scanOv .bar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;color:#fff;background:rgba(0,0,0,.7)}
 #scanOv .frame{position:absolute;left:50%;top:50%;width:min(78vw,360px);height:min(40vw,180px);transform:translate(-50%,-50%);border:3px solid var(--coral);border-radius:16px;box-shadow:0 0 0 100vmax rgba(0,0,0,.35);pointer-events:none}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--espresso);color:var(--sand-3);padding:11px 18px;border-radius:12px;font-size:14px;z-index:9000;display:none;max-width:90vw;text-align:center}
+
+/* sposta / registro / impostazioni */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg button{padding:13px 8px;border-radius:12px;border:1.5px solid var(--line);background:var(--sand-2);font-weight:700;cursor:pointer;font-size:14px}
+.seg button.on{background:var(--espresso);border-color:var(--espresso);color:var(--sand-3)}
+.stepper{display:flex;align-items:center;gap:10px}
+.stepper button{width:52px;height:52px;border-radius:14px;border:1.5px solid var(--line);background:var(--sand-2);font-size:26px;font-weight:700;cursor:pointer}
+.stepper input{width:90px;text-align:center;font-size:26px;font-weight:700;padding:8px}
+.stepper .mx{font-size:13px;color:var(--espresso-2)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:11px 18px;border-radius:999px;border:1.5px solid var(--line);background:var(--sand-2);font-weight:700;cursor:pointer;font-size:15px}
+.chip.sel{background:var(--coral);border-color:var(--coral);color:#fff}
+.selcard{display:flex;align-items:center;gap:12px;background:var(--sand-2);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px}
+.selcard .nm{font-weight:700;font-size:17px;flex:1;min-width:0}
+.dots{display:flex;justify-content:center;gap:14px;margin:6px 0 10px}
+.dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--espresso-2)}
+.dots i.f{background:var(--espresso);border-color:var(--espresso)}
+.pinsheet{max-width:340px;text-align:center}
+.pinsheet h3{font-size:24px}
+.pinpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
+.pinpad button{height:62px;border-radius:16px;border:1.5px solid var(--line);background:var(--sand-2);font-size:24px;font-weight:700;cursor:pointer}
+.pinpad button:active{background:var(--peach)}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.shake{animation:shake .3s}
+.staffrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.staffrow .sn{flex:1;font-weight:700;font-size:16px;min-width:120px}
+.staffrow .sa{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.staffrow .btn{padding:8px 14px;font-size:13px}
+.staffrow .pininp{width:110px;padding:8px 10px}
+.btn.d2{color:var(--danger)}
+.logrow{display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.logrow .when{font-size:12px;color:var(--espresso-2);grid-row:span 2;align-self:center;text-align:right;line-height:1.3}
+.logrow .what{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logrow .who2{font-size:12px;color:var(--espresso-2)}
+.logrow .q2{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:24px;grid-row:span 2;align-self:center}
+.sheet.wide{max-width:640px}
 </style>
 </head>
 <body>
@@ -277,6 +313,59 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
   </form>
 </div></div>
 
+<!-- Sposta -->
+<div class="ov" id="moveOv"><div class="sheet">
+  <h3>Sposta merce</h3>
+  <div id="mvPick">
+    <label>Prodotto</label>
+    <div class="with-scan"><input id="mvQ" placeholder="Cerca per nome o codice…" autocomplete="off"><button type="button" class="icon-btn" id="mvScan" aria-label="Scansiona">📷</button></div>
+    <div class="results" id="mvRes"></div>
+  </div>
+  <div id="mvSel" class="hidden">
+    <div class="selcard"><div class="nm"></div><div class="qty" id="mvSelQ"></div><button class="btn" id="mvChange" style="padding:8px 12px">Cambia</button></div>
+  </div>
+  <div id="mvBody" class="hidden">
+    <label>Direzione</label>
+    <div class="seg" id="mvDir"><button type="button" data-d="mn" class="on">Magazzino → Negozio</button><button type="button" data-d="nm">Negozio → Magazzino</button></div>
+    <label>Quantità</label>
+    <div class="stepper"><button type="button" id="mvMinus" aria-label="Meno">−</button><input id="mvQty" inputmode="numeric" value="1"><button type="button" id="mvPlus" aria-label="Più">+</button><span class="mx" id="mvMax"></span></div>
+    <div id="mvWhoWrap"><label>Chi sposta?</label><div class="chips" id="mvWho"></div></div>
+    <div class="ferr" id="mvErr"></div>
+  </div>
+  <div class="acts"><button type="button" class="btn" id="mvCancel">Annulla</button><button type="button" class="btn p" id="mvGo" disabled>Conferma</button></div>
+</div></div>
+
+<!-- PIN -->
+<div class="ov" id="pinOv" style="z-index:5500"><div class="sheet pinsheet">
+  <h3 id="pinTitle">PIN</h3>
+  <div class="dots" id="pinDots"><i></i><i></i><i></i><i></i></div>
+  <div class="ferr" id="pinErr" style="text-align:center"></div>
+  <div class="pinpad" id="pinPad"></div>
+</div></div>
+
+<!-- Registro movimenti -->
+<div class="ov" id="logOv"><div class="sheet wide">
+  <h3>Registro movimenti</h3>
+  <input id="logQ" placeholder="Filtra per prodotto o persona…" autocomplete="off">
+  <div id="logList" style="margin-top:8px"></div>
+  <div class="acts"><button type="button" class="btn p" id="logClose">Chiudi</button></div>
+</div></div>
+
+<!-- Impostazioni (titolare) -->
+<div class="ov" id="setOv"><div class="sheet wide">
+  <h3>Impostazioni</h3>
+  <label style="margin-top:0">Personale</label>
+  <p class="hint" style="margin:2px 0 6px">Chi può spostare merce. Ognuno ha un PIN di 4 cifre da inserire a ogni spostamento.</p>
+  <div id="staffList"></div>
+  <form id="staffAdd" autocomplete="off" style="margin-top:14px">
+    <label>Aggiungi dipendente</label>
+    <div class="row2"><input name="nome" placeholder="Nome" maxlength="40" required><input name="pin" placeholder="PIN (4 cifre)" inputmode="numeric" maxlength="4" required></div>
+    <div class="ferr" id="staffErr"></div>
+    <div class="acts"><button type="submit" class="btn p">Aggiungi</button></div>
+  </form>
+  <div class="acts" style="margin-top:6px"><button type="button" class="btn" id="setClose">Chiudi</button></div>
+</div></div>
+
 <!-- Scanner -->
 <div id="scanOv">
   <div class="bar"><span>Inquadra il codice a barre</span><button class="btn" id="scanClose">Chiudi</button></div>
@@ -369,18 +458,19 @@ function onUser(user){
   $('#whoRole').textContent = role==='titolare' ? 'Titolare' : 'Personale';
   $('#loginOverlay').classList.add('hidden'); $('#app').classList.remove('hidden');
   $('#loginBtn').disabled=false; $('#loginBtn').textContent='Entra';
-  buildTiles(); startProducts();
+  buildTiles(); startProducts(); startStaff();
 }
 
 /* ── Home: tessere ── */
 function buildTiles(){
   var t=[];
   if(role==='titolare') t.push({e:'➕',n:'Nuovo prodotto',d:'Aggiungi un articolo',act:function(){ openForm(null); }});
-  t.push({e:'🔁',n:'Sposta',d:'Da magazzino a negozio',soon:true});
-  t.push({e:'📋',n:'Registro movimenti',d:'Chi ha spostato cosa e quando',soon:true});
+  t.push({e:'🔁',n:'Sposta',d:'Tra magazzino e negozio',act:function(){ openMove(null); }});
+  t.push({e:'📋',n:'Registro movimenti',d:'Chi ha spostato cosa e quando',act:openLog});
   if(role==='titolare'){
     t.push({e:'📊',n:'Report',d:'Valore, margini, più venduti',soon:true,own:true});
     t.push({e:'🧾',n:'Fatture',d:'Fatture e ricevute scansionate',soon:true,own:true});
+    t.push({e:'⚙️',n:'Impostazioni',d:'Personale e PIN',act:openSettings});
   }
   var box=$('#tiles'); box.innerHTML='';
   t.forEach(function(x){
@@ -398,6 +488,7 @@ function startProducts(){
     products = snap.docs.map(function(d){ var o=d.data(); o.id=d.id; return o; });
     byId={}; products.forEach(function(p){ byId[p.id]=p; });
     renderResults();
+    if(mv && $('#moveOv').classList.contains('show')) renderMove();
   }, function(err){
     console.warn('prodotti:',err.code);
     toast(err.code==='permission-denied' ? 'Permessi mancanti: pubblica le regole del database (vedi firestore.rules).' : 'Errore nel caricamento dei prodotti.');
@@ -444,9 +535,10 @@ function openView(id){
    +'<div class="res" style="cursor:default;border:none;background:none;padding:0"><div class="pr" style="font-size:30px">'+eur.format(p.prezzoVendita||0)+'</div></div>'
    +'<div class="bigqty"><div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">In negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">In magazzino<b>'+(p.qtaMagazzino|0)+'</b></div></div>'
    +'<dl class="det">'+rows+'</dl><div id="costRow"></div>'
-   +'<div class="acts">'+(role==='titolare'?'<button class="btn" id="editBtn">Modifica</button>':'')+'<button class="btn p" id="closeView">Chiudi</button></div>';
+   +'<div class="acts">'+(role==='titolare'?'<button class="btn" id="editBtn">Modifica</button>':'')+'<button class="btn" id="moveBtn">Sposta</button><button class="btn p" id="closeView">Chiudi</button></div>';
   $('#viewOv').classList.add('show');
   $('#closeView').onclick=function(){ $('#viewOv').classList.remove('show'); };
+  $('#moveBtn').onclick=function(){ $('#viewOv').classList.remove('show'); openMove(p); };
   if(role==='titolare'){
     $('#editBtn').onclick=function(){ $('#viewOv').classList.remove('show'); openForm(id); };
     fdb.doc('prodotti/'+id+'/privato/costo').get().then(function(d){
@@ -546,6 +638,202 @@ function scan(){
   });
 }
 $('#scanSearch').onclick=function(){ scan().then(function(c){ if(c){ $('#q').value=c; renderResults(); } }); };
+
+/* ── Personale e PIN ── */
+var staff=[], unsubStaff=null;
+function hex(buf){ return Array.prototype.map.call(new Uint8Array(buf),function(b){return ('0'+b.toString(16)).slice(-2);}).join(''); }
+function rndSalt(){ var a=new Uint8Array(16); crypto.getRandomValues(a); return hex(a); }
+function hashPin(pin,saltHex){
+  if(!(window.crypto && crypto.subtle)) return Promise.reject(new Error('nocrypto'));
+  var salt=new Uint8Array(saltHex.match(/../g).map(function(h){return parseInt(h,16);}));
+  return crypto.subtle.importKey('raw',new TextEncoder().encode(pin),'PBKDF2',false,['deriveBits'])
+    .then(function(k){ return crypto.subtle.deriveBits({name:'PBKDF2',salt:salt,iterations:100000,hash:'SHA-256'},k,256); }).then(hex);
+}
+function startStaff(){
+  if(unsubStaff) unsubStaff();
+  unsubStaff=fdb.collection('personale').onSnapshot(function(snap){
+    staff=snap.docs.map(function(d){ var o=d.data(); o.id=d.id; return o; })
+      .sort(function(a,b){ return String(a.nome).localeCompare(String(b.nome),'it'); });
+    if($('#setOv').classList.contains('show')) renderStaff();
+    if(mv && $('#moveOv').classList.contains('show')) renderMove();
+  },function(err){ console.warn('personale:',err.code); });
+}
+function openSettings(){ renderStaff(); $('#staffErr').textContent=''; $('#setOv').classList.add('show'); }
+$('#setClose').onclick=function(){ $('#setOv').classList.remove('show'); };
+function renderStaff(){
+  $('#staffList').innerHTML = staff.length ? staff.map(function(s){
+    return '<div class="staffrow" data-id="'+esc(s.id)+'"><div class="sn">'+esc(s.nome)+'</div><div class="sa"><button class="btn" data-a="pin">Cambia PIN</button><button class="btn d2" data-a="del">Rimuovi</button></div></div>';
+  }).join('') : '<div class="empty" style="padding:14px">Nessun dipendente. Aggiungine uno qui sotto.</div>';
+}
+$('#staffList').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  var row=b.closest('.staffrow'), s=staff.filter(function(x){return x.id===row.dataset.id;})[0]; if(!s) return;
+  var a=b.dataset.a;
+  if(a==='del'){
+    if(confirm('Rimuovere '+s.nome+'? I suoi spostamenti passati restano nel registro.')) fdb.doc('personale/'+s.id).delete().catch(function(){ toast('Operazione non riuscita.'); });
+  } else if(a==='pin'){
+    row.querySelector('.sa').innerHTML='<input class="pininp" inputmode="numeric" maxlength="4" placeholder="Nuovo PIN" autocomplete="off"><button class="btn p" data-a="pinok">Salva</button><button class="btn" data-a="pinno">Annulla</button>';
+    row.querySelector('.pininp').focus();
+  } else if(a==='pinno'){ renderStaff(); }
+  else if(a==='pinok'){
+    var v=row.querySelector('.pininp').value.trim();
+    if(!/^\d{4}$/.test(v)){ toast('Il PIN deve essere di 4 cifre.'); return; }
+    var salt=rndSalt();
+    hashPin(v,salt).then(function(h){ return fdb.doc('personale/'+s.id).update({salt:salt,pinHash:h}); })
+      .then(function(){ toast('PIN di '+s.nome+' aggiornato.'); })
+      .catch(function(){ toast('PIN non salvato. Riprova.'); });
+  }
+});
+$('#staffAdd').addEventListener('submit',function(e){
+  e.preventDefault();
+  var f=e.target, err=$('#staffErr'), nome=f.nome.value.trim(), pin=f.pin.value.trim(); err.textContent='';
+  if(!nome){ err.textContent='Inserisci il nome.'; return; }
+  if(!/^\d{4}$/.test(pin)){ err.textContent='Il PIN deve essere di 4 cifre.'; return; }
+  if(staff.some(function(x){ return norm(x.nome)===norm(nome); })){ err.textContent='Esiste già un dipendente con questo nome.'; return; }
+  var salt=rndSalt();
+  hashPin(pin,salt).then(function(h){ return fdb.collection('personale').add({nome:nome,salt:salt,pinHash:h,creatoIl:firebase.firestore.FieldValue.serverTimestamp()}); })
+    .then(function(){ f.reset(); toast(nome+' aggiunto.'); })
+    .catch(function(er){ err.textContent = er&&er.message==='nocrypto' ? 'Questo browser non supporta la cifratura del PIN (serve una connessione HTTPS).' : 'Non salvato. Controlla la connessione.'; });
+});
+
+/* ── Sposta merce ── */
+var mv=null, pinTry=0, pinLock=0;
+function srcQty(){ return mv&&mv.prod ? ((mv.dir==='mn'?mv.prod.qtaMagazzino:mv.prod.qtaNegozio)|0) : 0; }
+function pills(p){ return '<div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">Negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">Magazzino<b>'+(p.qtaMagazzino|0)+'</b></div>'; }
+function openMove(p){
+  mv={prod:p||null,dir:'mn',qty:1,who:role==='titolare'?{id:'titolare',nome:'Titolare'}:null};
+  $('#mvQ').value=''; $('#mvRes').innerHTML=''; $('#mvErr').textContent='';
+  renderMove(); $('#moveOv').classList.add('show'); if(!p) setTimeout(function(){ $('#mvQ').focus(); },50);
+}
+function renderMove(){
+  var p=mv.prod;
+  $('#mvPick').classList.toggle('hidden',!!p); $('#mvSel').classList.toggle('hidden',!p); $('#mvBody').classList.toggle('hidden',!p);
+  if(p){
+    p=byId[p.id]||p; mv.prod=p;
+    $('#mvSel .nm').textContent=p.nome; $('#mvSelQ').innerHTML=pills(p);
+    Array.prototype.forEach.call(document.querySelectorAll('#mvDir button'),function(b){ b.classList.toggle('on',b.dataset.d===mv.dir); });
+    var max=srcQty(); if(mv.qty>max) mv.qty=max; if(mv.qty<1 && max>0) mv.qty=1;
+    $('#mvQty').value=mv.qty;
+    $('#mvMax').textContent = max ? 'disponibili: '+max : 'Nessun pezzo disponibile da qui';
+    $('#mvWhoWrap').classList.toggle('hidden',role==='titolare');
+    if(role==='personale'){
+      $('#mvWho').innerHTML = staff.length ? staff.map(function(s){ return '<button type="button" class="chip'+(mv.who&&mv.who.id===s.id?' sel':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('')
+        : '<div class="hint">Nessun dipendente configurato. Il titolare deve aggiungerli in Impostazioni.</div>';
+    }
+  }
+  updGo();
+}
+function pickMoveProduct(p){ mv.prod=p; mv.qty=1; $('#mvErr').textContent=''; renderMove(); }
+$('#mvQ').addEventListener('input',function(){
+  var q=norm(this.value);
+  if(!q){ $('#mvRes').innerHTML=''; return; }
+  var list=products.filter(function(p){return matches(p,q);}).sort(function(a,b){ return rank(a,q)-rank(b,q) || String(a.nome).localeCompare(String(b.nome),'it'); }).slice(0,6);
+  $('#mvRes').innerHTML = list.length ? list.map(function(p){
+    return '<button type="button" class="res" data-id="'+esc(p.id)+'"><div class="info"><div class="nm">'+esc(p.nome)+'</div><div class="codes">'+esc([p.codiceProdotto,p.codiceRivenditore,p.codiceCustom,p.barcode].filter(Boolean).join(' · ')||'—')+'</div></div><div class="qty">'+pills(p)+'</div></button>';
+  }).join('') : '<div class="empty" style="padding:14px">Nessun risultato.</div>';
+});
+$('#mvRes').addEventListener('click',function(e){ var b=e.target.closest('.res'); if(b&&byId[b.dataset.id]) pickMoveProduct(byId[b.dataset.id]); });
+$('#mvScan').onclick=function(){ scan().then(function(c){
+  if(!c) return;
+  var hit=products.filter(function(p){ return CODE_KEYS.some(function(k){ return p[k] && norm(p[k])===norm(c); }); })[0];
+  if(hit) pickMoveProduct(hit); else { $('#mvQ').value=c; toast('Nessun prodotto con il codice '+c+'.'); }
+}); };
+$('#mvChange').onclick=function(){ mv.prod=null; renderMove(); $('#mvQ').value=''; $('#mvRes').innerHTML=''; setTimeout(function(){ $('#mvQ').focus(); },50); };
+$('#mvDir').addEventListener('click',function(e){ var b=e.target.closest('button'); if(b){ mv.dir=b.dataset.d; mv.qty=1; renderMove(); } });
+$('#mvMinus').onclick=function(){ if(mv.qty>1){ mv.qty--; renderMove(); } };
+$('#mvPlus').onclick=function(){ if(mv.qty<srcQty()){ mv.qty++; renderMove(); } };
+function updGo(){ $('#mvGo').disabled=!(mv && mv.prod && mv.qty>=1 && mv.qty<=srcQty() && mv.who); }
+$('#mvQty').addEventListener('input',function(){ var n=parseInt(this.value,10); mv.qty=isFinite(n)?Math.max(0,Math.min(n,srcQty())):0; updGo(); });
+// niente renderMove() qui: ridisegnerebbe i nomi mentre li si sta toccando e il tocco andrebbe perso
+$('#mvQty').addEventListener('blur',function(){ if(!mv) return; var max=srcQty(); if(mv.qty<1 && max>0) mv.qty=1; this.value=mv.qty; updGo(); });
+$('#mvWho').addEventListener('click',function(e){ var b=e.target.closest('.chip'); if(!b) return; mv.who=staff.filter(function(s){return s.id===b.dataset.id;})[0]||null; renderMove(); });
+$('#mvCancel').onclick=function(){ $('#moveOv').classList.remove('show'); mv=null; };
+$('#mvGo').onclick=function(){
+  if(!mv.who) return;
+  if(role==='titolare') doMove(); else askPin(mv.who,doMove);
+};
+function doMove(){
+  var p=mv.prod, n=mv.qty, from=mv.dir==='mn'?'magazzino':'negozio', to=mv.dir==='mn'?'negozio':'magazzino';
+  var F=firebase.firestore.FieldValue, upd={aggiornatoIl:F.serverTimestamp()};
+  upd['qta'+from.charAt(0).toUpperCase()+from.slice(1)]=F.increment(-n);
+  upd['qta'+to.charAt(0).toUpperCase()+to.slice(1)]=F.increment(n);
+  var b=fdb.batch();
+  b.update(fdb.doc('prodotti/'+p.id),upd);
+  b.set(fdb.collection('movimenti').doc(),{prodottoId:p.id,prodottoNome:p.nome,codice:p.codiceProdotto||'',da:from,a:to,qta:n,staffId:mv.who.id,staffNome:mv.who.nome,ruolo:role,quando:F.serverTimestamp()});
+  var go=$('#mvGo'); go.disabled=true; var finished=false, msg=n+' × '+p.nome+': '+from+' → '+to+'.';
+  function ok(offline){ if(finished) return; finished=true; $('#moveOv').classList.remove('show'); mv=null; toast(offline?'Nessuna connessione: lo spostamento verrà registrato appena torna la rete.':'Spostato — '+msg); }
+  var t=setTimeout(function(){ ok(true); },8000);
+  b.commit().then(function(){ clearTimeout(t); ok(false); }).catch(function(er){
+    clearTimeout(t); if(finished) return; finished=true; go.disabled=false; console.warn('sposta:',er.code);
+    $('#mvErr').textContent = er.code==='permission-denied' ? 'Spostamento rifiutato: la quantità è cambiata nel frattempo o le regole del database non sono aggiornate. Riprova.' : 'Spostamento non riuscito. Controlla la connessione.';
+  });
+}
+
+/* ── Tastierino PIN ── */
+var pinBuf='', pinWho=null, pinDone=null;
+(function(){
+  var pad=$('#pinPad'), keys=['1','2','3','4','5','6','7','8','9','✕','0','⌫'];
+  pad.innerHTML=keys.map(function(k){ return '<button type="button" data-k="'+k+'">'+k+'</button>'; }).join('');
+  pad.addEventListener('click',function(e){ var b=e.target.closest('button'); if(b) pinKey(b.dataset.k); });
+})();
+function pinDots(){ Array.prototype.forEach.call(document.querySelectorAll('#pinDots i'),function(d,i){ d.classList.toggle('f',i<pinBuf.length); }); }
+function askPin(who,done){
+  pinWho=who; pinDone=done; pinBuf=''; pinDots();
+  $('#pinTitle').textContent='Ciao '+who.nome+', inserisci il PIN'; $('#pinErr').textContent='';
+  $('#pinOv').classList.add('show');
+}
+function closePin(){ $('#pinOv').classList.remove('show'); pinBuf=''; pinWho=null; pinDone=null; }
+function pinKey(k){
+  if(!pinWho) return;
+  if(k==='✕'){ closePin(); return; }
+  if(Date.now()<pinLock){ $('#pinErr').textContent='Troppi tentativi. Riprova tra '+Math.ceil((pinLock-Date.now())/1000)+' secondi.'; return; }
+  if(k==='⌫'){ pinBuf=pinBuf.slice(0,-1); pinDots(); return; }
+  if(pinBuf.length>=4) return;
+  pinBuf+=k; pinDots(); $('#pinErr').textContent='';
+  if(pinBuf.length<4) return;
+  var who=staff.filter(function(s){return s.id===pinWho.id;})[0], entered=pinBuf, done=pinDone;
+  if(!who||!who.salt||!who.pinHash){ $('#pinErr').textContent='PIN non impostato: avvisa il titolare.'; pinBuf=''; pinDots(); return; }
+  hashPin(entered,who.salt).then(function(h){
+    if(h===who.pinHash){ pinTry=0; closePin(); done(); }
+    else {
+      pinTry++; pinBuf=''; pinDots();
+      var d=$('#pinDots'); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake');
+      if(pinTry>=5){ pinLock=Date.now()+30000; pinTry=0; $('#pinErr').textContent='Troppi tentativi. Riprova tra 30 secondi.'; }
+      else $('#pinErr').textContent='PIN errato';
+    }
+  }).catch(function(){ $('#pinErr').textContent='Questo browser non supporta la verifica del PIN (serve HTTPS).'; pinBuf=''; pinDots(); });
+}
+document.addEventListener('keydown',function(e){
+  if(!pinWho) return;
+  if(/^\d$/.test(e.key)) pinKey(e.key); else if(e.key==='Backspace') pinKey('⌫'); else if(e.key==='Escape') closePin();
+});
+
+/* ── Registro movimenti ── */
+var unsubLog=null, logRows=[];
+function openLog(){
+  $('#logOv').classList.add('show'); $('#logQ').value=''; $('#logList').innerHTML='<div class="empty">Caricamento…</div>';
+  if(unsubLog) unsubLog();
+  unsubLog=fdb.collection('movimenti').orderBy('quando','desc').limit(150).onSnapshot(function(snap){
+    logRows=snap.docs.map(function(d){ return d.data({serverTimestamps:'estimate'}); }); renderLog();
+  },function(err){ console.warn('movimenti:',err.code); $('#logList').innerHTML='<div class="empty">Impossibile leggere il registro.</div>'; });
+}
+function closeLog(){ $('#logOv').classList.remove('show'); if(unsubLog){ unsubLog(); unsubLog=null; } }
+$('#logClose').onclick=closeLog;
+$('#logQ').addEventListener('input',renderLog);
+function tsDate(t){ return t && t.toDate ? t.toDate() : (t instanceof Date ? t : null); }
+function renderLog(){
+  var q=norm($('#logQ').value);
+  var rows=logRows.filter(function(r){ return !q || norm(r.prodottoNome+' '+r.staffNome+' '+(r.codice||'')).indexOf(q)>=0; });
+  $('#logList').innerHTML = rows.length ? rows.map(function(r){
+    var d=tsDate(r.quando);
+    var when=d ? d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'})+'<br>'+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '…';
+    return '<div class="logrow"><div class="when">'+when+'</div><div class="what">'+esc(r.prodottoNome)+'</div><div class="q2">'+(r.qta|0)+'</div><div class="who2">'+esc(r.staffNome)+' · '+(r.da==='magazzino'?'Magazzino → Negozio':'Negozio → Magazzino')+'</div></div>';
+  }).join('') : '<div class="empty">'+(logRows.length?'Nessun risultato.':'Nessuno spostamento registrato.')+'</div>';
+}
+
+/* chiudi i fogli toccando lo sfondo */
+['moveOv','setOv'].forEach(function(id){ $('#'+id).addEventListener('click',function(e){ if(e.target===this){ this.classList.remove('show'); if(id==='moveOv') mv=null; } }); });
+$('#logOv').addEventListener('click',function(e){ if(e.target===this) closeLog(); });
 
 /* ── Orologio ── */
 function tick(){ var d=new Date(); $('#clockT').textContent=d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}); $('#clockD').textContent=d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}); }
