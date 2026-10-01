@@ -46,9 +46,13 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - [ ] Every stock decrease records a reason: sold / returned to distributor / damaged-lost / correction. Only "sold" counts as a sale in reports
 - [x] Per-person PIN (limit: stops colleagues picking each other's name; not proof against a determined technical user — server-side check would need Cloud Functions)
 
-## 4b. Import from the old Edicola POS (to do)
+## Staff names (from Chuck, Oct 1) — to be entered by the owner in Impostazioni → Personale, each with their own PIN
+Andrea, Marxo (spelling to confirm), Alessio, Luca, Heber, Fiorella, Sawkat, Made, Federica (is she a PIN user, or only the Titolare login?).
+PINs are chosen by the owner and not stored anywhere in the repo.
+
+## 4b. Import (ON HOLD — waiting for Federica's own spreadsheet, which should be cleaner than the old POS catalog)
 - Old catalog (root `index.html`, `PRODUCTS`): 805 items; fields id, name, category, sale price, VAT, emoji; 25 have a photo, 25 have `sizes`. NO codes, quantities or purchase prices. 39 duplicate names.
-- Plan: export to a CSV she can fill in (codes, quantities, cost), then an owner-only "Importa" in Impostazioni (preview, batches of 500). Needs new fields: categoria, iva.
+- Fallback plan if no spreadsheet arrives: export to a CSV she can fill in (codes, quantities, cost), then an owner-only "Importa" in Impostazioni (preview, batches of 500). Needs new fields: categoria, iva.
 - Open: her scanned images/codes — need a few samples to see how codes are attached.
 
 ## 5. Documents (nice to have)
