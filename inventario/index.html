@@ -355,11 +355,11 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
 <div class="ov" id="setOv"><div class="sheet wide">
   <h3>Impostazioni</h3>
   <label style="margin-top:0">Personale</label>
-  <p class="hint" style="margin:2px 0 6px">Chi può spostare merce. Ognuno ha un PIN di 4 cifre da inserire a ogni spostamento.</p>
+  <p class="hint" style="margin:2px 0 6px">Chi può spostare merce. Il personale inserisce il proprio PIN di 4 cifre a ogni spostamento. Lasciando il PIN vuoto, la persona compare solo quando entri come titolare (per te e la famiglia).</p>
   <div id="staffList"></div>
   <form id="staffAdd" autocomplete="off" style="margin-top:14px">
     <label>Aggiungi dipendente</label>
-    <div class="row2"><input name="nome" placeholder="Nome" maxlength="40" required><input name="pin" placeholder="PIN (4 cifre)" inputmode="numeric" maxlength="4" required></div>
+    <div class="row2"><input name="nome" placeholder="Nome" maxlength="40" required><input name="pin" placeholder="PIN (vuoto = solo titolare)" inputmode="numeric" maxlength="4"></div>
     <div class="ferr" id="staffErr"></div>
     <div class="acts"><button type="submit" class="btn p">Aggiungi</button></div>
   </form>
@@ -662,7 +662,7 @@ function openSettings(){ renderStaff(); $('#staffErr').textContent=''; $('#setOv
 $('#setClose').onclick=function(){ $('#setOv').classList.remove('show'); };
 function renderStaff(){
   $('#staffList').innerHTML = staff.length ? staff.map(function(s){
-    return '<div class="staffrow" data-id="'+esc(s.id)+'"><div class="sn">'+esc(s.nome)+'</div><div class="sa"><button class="btn" data-a="pin">Cambia PIN</button><button class="btn d2" data-a="del">Rimuovi</button></div></div>';
+    return '<div class="staffrow" data-id="'+esc(s.id)+'"><div class="sn">'+esc(s.nome)+(s.pinHash?'':' <span class="pill" style="display:inline-block;font-size:11px;padding:2px 8px;font-weight:500">solo titolare</span>')+'</div><div class="sa"><button class="btn" data-a="pin">'+(s.pinHash?'Cambia PIN':'Imposta PIN')+'</button><button class="btn d2" data-a="del">Rimuovi</button></div></div>';
   }).join('') : '<div class="empty" style="padding:14px">Nessun dipendente. Aggiungine uno qui sotto.</div>';
 }
 $('#staffList').addEventListener('click',function(e){
@@ -688,10 +688,11 @@ $('#staffAdd').addEventListener('submit',function(e){
   e.preventDefault();
   var f=e.target, err=$('#staffErr'), nome=f.nome.value.trim(), pin=f.pin.value.trim(); err.textContent='';
   if(!nome){ err.textContent='Inserisci il nome.'; return; }
-  if(!/^\d{4}$/.test(pin)){ err.textContent='Il PIN deve essere di 4 cifre.'; return; }
+  if(pin && !/^\d{4}$/.test(pin)){ err.textContent='Il PIN deve essere di 4 cifre (o lascialo vuoto).'; return; }
   if(staff.some(function(x){ return norm(x.nome)===norm(nome); })){ err.textContent='Esiste già un dipendente con questo nome.'; return; }
-  var salt=rndSalt();
-  hashPin(pin,salt).then(function(h){ return fdb.collection('personale').add({nome:nome,salt:salt,pinHash:h,creatoIl:firebase.firestore.FieldValue.serverTimestamp()}); })
+  var ts=firebase.firestore.FieldValue.serverTimestamp(), salt=rndSalt();
+  (pin ? hashPin(pin,salt).then(function(h){ return fdb.collection('personale').add({nome:nome,salt:salt,pinHash:h,creatoIl:ts}); })
+       : fdb.collection('personale').add({nome:nome,creatoIl:ts}))
     .then(function(){ f.reset(); toast(nome+' aggiunto.'); })
     .catch(function(er){ err.textContent = er&&er.message==='nocrypto' ? 'Questo browser non supporta la cifratura del PIN (serve una connessione HTTPS).' : 'Non salvato. Controlla la connessione.'; });
 });
@@ -701,7 +702,7 @@ var mv=null, pinTry=0, pinLock=0;
 function srcQty(){ return mv&&mv.prod ? ((mv.dir==='mn'?mv.prod.qtaMagazzino:mv.prod.qtaNegozio)|0) : 0; }
 function pills(p){ return '<div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">Negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">Magazzino<b>'+(p.qtaMagazzino|0)+'</b></div>'; }
 function openMove(p){
-  mv={prod:p||null,dir:'mn',qty:1,who:role==='titolare'?{id:'titolare',nome:'Titolare'}:null};
+  mv={prod:p||null,dir:'mn',qty:1,who:null};
   $('#mvQ').value=''; $('#mvRes').innerHTML=''; $('#mvErr').textContent='';
   renderMove(); $('#moveOv').classList.add('show'); if(!p) setTimeout(function(){ $('#mvQ').focus(); },50);
 }
@@ -715,13 +716,16 @@ function renderMove(){
     var max=srcQty(); if(mv.qty>max) mv.qty=max; if(mv.qty<1 && max>0) mv.qty=1;
     $('#mvQty').value=mv.qty;
     $('#mvMax').textContent = max ? 'disponibili: '+max : 'Nessun pezzo disponibile da qui';
-    $('#mvWhoWrap').classList.toggle('hidden',role==='titolare');
-    if(role==='personale'){
-      $('#mvWho').innerHTML = staff.length ? staff.map(function(s){ return '<button type="button" class="chip'+(mv.who&&mv.who.id===s.id?' sel':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('')
-        : '<div class="hint">Nessun dipendente configurato. Il titolare deve aggiungerli in Impostazioni.</div>';
-    }
+    var who=whoChoices();
+    $('#mvWho').innerHTML = who.length ? who.map(function(s){ return '<button type="button" class="chip'+(mv.who&&mv.who.id===s.id?' sel':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('')
+      : '<div class="hint">Nessun dipendente configurato. Il titolare deve aggiungerli in Impostazioni.</div>';
   }
   updGo();
+}
+// Personale: solo chi ha un PIN. Titolare: tutti i nomi, senza PIN (ha già fatto l'accesso). Senza nomi, il titolare può comunque lavorare come «Titolare».
+function whoChoices(){
+  if(role==='personale') return staff.filter(function(s){ return s.pinHash; });
+  return staff.length ? staff : [{id:'titolare',nome:'Titolare'}];
 }
 function pickMoveProduct(p){ mv.prod=p; mv.qty=1; $('#mvErr').textContent=''; renderMove(); }
 $('#mvQ').addEventListener('input',function(){
@@ -746,7 +750,7 @@ function updGo(){ $('#mvGo').disabled=!(mv && mv.prod && mv.qty>=1 && mv.qty<=sr
 $('#mvQty').addEventListener('input',function(){ var n=parseInt(this.value,10); mv.qty=isFinite(n)?Math.max(0,Math.min(n,srcQty())):0; updGo(); });
 // niente renderMove() qui: ridisegnerebbe i nomi mentre li si sta toccando e il tocco andrebbe perso
 $('#mvQty').addEventListener('blur',function(){ if(!mv) return; var max=srcQty(); if(mv.qty<1 && max>0) mv.qty=1; this.value=mv.qty; updGo(); });
-$('#mvWho').addEventListener('click',function(e){ var b=e.target.closest('.chip'); if(!b) return; mv.who=staff.filter(function(s){return s.id===b.dataset.id;})[0]||null; renderMove(); });
+$('#mvWho').addEventListener('click',function(e){ var b=e.target.closest('.chip'); if(!b) return; mv.who=whoChoices().filter(function(s){return s.id===b.dataset.id;})[0]||null; renderMove(); });
 $('#mvCancel').onclick=function(){ $('#moveOv').classList.remove('show'); mv=null; };
 $('#mvGo').onclick=function(){
   if(!mv.who) return;

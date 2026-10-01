@@ -47,7 +47,7 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - [x] Per-person PIN (limit: stops colleagues picking each other's name; not proof against a determined technical user — server-side check would need Cloud Functions)
 
 ## Staff names (from Chuck, Oct 1) — to be entered by the owner in Impostazioni → Personale, each with their own PIN
-Andrea, Marxo (spelling to confirm), Alessio, Luca, Heber, Fiorella, Sawkat, Made, Federica (is she a PIN user, or only the Titolare login?).
+Andrea, Marco, Alessio, Luca, Heber, Fiorella, Sawkat, Made (staff, with PIN). Family (Federica, her mother, her sister): added with the PIN left blank = visible only when logged in as owner. The owner login must also pick a name for every move (no PIN).
 PINs are chosen by the owner and not stored anywhere in the repo.
 
 ## 4b. Import (ON HOLD — waiting for Federica's own spreadsheet, which should be cleaner than the old POS catalog)
