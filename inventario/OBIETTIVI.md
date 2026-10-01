@@ -59,6 +59,15 @@ PINs are chosen by the owner and not stored anywhere in the repo.
 - [ ] Upload scanned invoices and purchase receipts (photo or PDF), tagged with supplier, date, amount
 - [ ] Owner-only. Needs Firebase Storage (Blaze plan) — decision pending
 
+### 5b. Invoice -> stock intake (idea from Chuck, Oct 1)
+Goal: Federica photographs/uploads a supplier invoice and the app proposes the stock additions (matching existing items, proposing new ones).
+- Step 1: upload + store invoices (Storage, Blaze plan). Owner-only.
+- Step 2: IF suppliers send electronic invoices (FatturaPA XML via SDI), read the XML directly: exact, free, no AI. ASK Federica whether she gets XML (or her accountant does).
+- Step 3: paper/photo invoices and DDT: AI reading of the image via a Cloud Function (Blaze plan; API key kept server-side, never in the web page). ALWAYS a review screen: nothing is written until the owner confirms each line.
+- Matching: supplier item code <-> our "codice rivenditore"; fallback fuzzy name match; unmatched lines become proposed NEW items (name, purchase price, VAT pre-filled).
+- Received goods go to storage as a new "carico" movement (extend the log) linked to the invoice; guard against the same invoice (supplier + number) being loaded twice.
+- Owner decision needed: invoice images would be sent to an outside AI service (privacy / the family's comfort).
+
 ## 6. Reports (owner only)
 - [ ] Printable full inventory (A4 print layout) + CSV
 - [ ] Total inventory value at cost; potential revenue at sale price; potential margin € and %
