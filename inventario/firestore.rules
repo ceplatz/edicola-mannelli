@@ -12,14 +12,52 @@ service cloud.firestore {
         && request.auth.token.email.lower() == 'staff@edicolamannelli.com';
     }
 
+    // Il personale può SOLO spostare pezzi tra negozio e magazzino:
+    // il totale non cambia e nessuna quantità scende sotto zero.
+    function soloTrasferimento() {
+      let n = request.resource.data;
+      let o = resource.data;
+      return request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['qtaNegozio', 'qtaMagazzino', 'aggiornatoIl'])
+        && n.qtaNegozio is int && n.qtaMagazzino is int
+        && n.qtaNegozio >= 0 && n.qtaMagazzino >= 0
+        && n.qtaNegozio + n.qtaMagazzino == o.qtaNegozio + o.qtaMagazzino;
+    }
+
     match /prodotti/{id} {
       allow read: if titolare() || personale();
-      allow create, update, delete: if titolare();
+      allow create, delete: if titolare();
+      allow update: if titolare() || (personale() && soloTrasferimento());
 
       // Prezzo di acquisto: visibile SOLO al titolare.
       match /privato/{doc} {
         allow read, write: if titolare();
       }
+    }
+
+    // Dipendenti e PIN (salvato come hash salato). Lo legge anche il personale
+    // per verificare il PIN sul dispositivo; lo modifica solo il titolare.
+    match /personale/{id} {
+      allow read: if titolare() || personale();
+      allow write: if titolare();
+    }
+
+    // Registro movimenti: si può solo aggiungere. Mai modificare né cancellare.
+    match /movimenti/{id} {
+      allow read: if titolare() || personale();
+      allow create: if (titolare() || personale())
+        && request.resource.data.keys().hasOnly(
+             ['prodottoId', 'prodottoNome', 'codice', 'da', 'a', 'qta',
+              'staffId', 'staffNome', 'ruolo', 'quando'])
+        && request.resource.data.quando == request.time
+        && request.resource.data.qta is int && request.resource.data.qta > 0
+        && request.resource.data.da in ['magazzino', 'negozio']
+        && request.resource.data.a in ['magazzino', 'negozio']
+        && request.resource.data.da != request.resource.data.a
+        && request.resource.data.ruolo == (titolare() ? 'titolare' : 'personale')
+        && (titolare()
+            || exists(/databases/$(database)/documents/personale/$(request.resource.data.staffId)));
+      allow update, delete: if false;
     }
   }
 }

@@ -18,6 +18,11 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - [x] Local-only prototype (replaced by the Firebase app; still in git history).
 - [x] Firebase app v1: splash sequence, login (Firebase Auth), banner, search, tiles, product add/edit/view (Firestore), camera barcode scan, owner-only purchase price. `config.js` + `firestore.rules`. Tested with an in-memory Firebase stand-in; NOT yet tested against the real project or on a real camera.
 
+- [x] Staff + PIN: owner-only Impostazioni → Personale (add / remove / change 4-digit PIN). PIN stored as salted PBKDF2 hash.
+- [x] Sposta: either direction (storage <-> shop), staff pick name + enter PIN; owner needs no PIN. Staff can ONLY transfer (rules keep the total constant, never below 0).
+- [x] Registro movimenti: append-only, newest first, filter by product/person.
+- [x] Firestore rules tested on the real emulator (30 checks). App flow tested with an in-memory stand-in (19 checks).
+
 ## 1. Look and feel
 - [x] Start-up: Viridian black splash (copied from Verdi) → Edicola Mannelli splash → login
 - [x] Viridian splash as a single on/off setting (`mostraSplashViridian` in config.js)
@@ -36,14 +41,32 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - [x] Location model decided: separate quantities, shop + storage, for every item
 
 ## 4. Stock movements
-- [ ] Move stock storage → shop, staff picks their name from a list
-- [ ] Movement log: who, what, how many, from → to, date and time (server time), append-only
+- [x] Move stock both directions, staff picks their name + PIN
+- [x] Movement log: who, what, how many, from → to, date and time (server time), append-only
 - [ ] Every stock decrease records a reason: sold / returned to distributor / damaged-lost / correction. Only "sold" counts as a sale in reports
-- [ ] Open: per-person PIN instead of shared staff password, so the log can't be faked
+- [x] Per-person PIN (limit: stops colleagues picking each other's name; not proof against a determined technical user — server-side check would need Cloud Functions)
+
+## Staff names (from Chuck, Oct 1) — to be entered by the owner in Impostazioni → Personale, each with their own PIN
+Andrea, Marco, Alessio, Luca, Heber, Fiorella, Sawkat, Made (staff, with PIN). Family (Federica, her mother, her sister): added with the PIN left blank = visible only when logged in as owner. The owner login must also pick a name for every move (no PIN).
+PINs are chosen by the owner and not stored anywhere in the repo.
+
+## 4b. Import (ON HOLD — waiting for Federica's own spreadsheet, which should be cleaner than the old POS catalog)
+- Old catalog (root `index.html`, `PRODUCTS`): 805 items; fields id, name, category, sale price, VAT, emoji; 25 have a photo, 25 have `sizes`. NO codes, quantities or purchase prices. 39 duplicate names.
+- Fallback plan if no spreadsheet arrives: export to a CSV she can fill in (codes, quantities, cost), then an owner-only "Importa" in Impostazioni (preview, batches of 500). Needs new fields: categoria, iva.
+- Open: her scanned images/codes — need a few samples to see how codes are attached.
 
 ## 5. Documents (nice to have)
 - [ ] Upload scanned invoices and purchase receipts (photo or PDF), tagged with supplier, date, amount
 - [ ] Owner-only. Needs Firebase Storage (Blaze plan) — decision pending
+
+### 5b. Invoice -> stock intake (idea from Chuck, Oct 1)
+Goal: Federica photographs/uploads a supplier invoice and the app proposes the stock additions (matching existing items, proposing new ones).
+- Step 1: upload + store invoices (Storage, Blaze plan). Owner-only.
+- Step 2: IF suppliers send electronic invoices (FatturaPA XML via SDI), read the XML directly: exact, free, no AI. ASK Federica whether she gets XML (or her accountant does).
+- Step 3: paper/photo invoices and DDT: AI reading of the image via a Cloud Function (Blaze plan; API key kept server-side, never in the web page). ALWAYS a review screen: nothing is written until the owner confirms each line.
+- Matching: supplier item code <-> our "codice rivenditore"; fallback fuzzy name match; unmatched lines become proposed NEW items (name, purchase price, VAT pre-filled).
+- Received goods go to storage as a new "carico" movement (extend the log) linked to the invoice; guard against the same invoice (supplier + number) being loaded twice.
+- Owner decision needed: invoice images would be sent to an outside AI service (privacy / the family's comfort).
 
 ## 6. Reports (owner only)
 - [ ] Printable full inventory (A4 print layout) + CSV
