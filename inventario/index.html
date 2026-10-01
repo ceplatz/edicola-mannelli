@@ -194,6 +194,13 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
 .logrow .who2{font-size:12px;color:var(--espresso-2)}
 .logrow .q2{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:24px;grid-row:span 2;align-self:center}
 .sheet.wide{max-width:640px}
+.sheet select,.sheet textarea,.filterrow select{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px;outline:none;font-family:inherit}
+.sheet textarea{resize:vertical;min-height:84px;line-height:1.35}
+.sheet select:focus,.sheet textarea:focus,.filterrow select:focus{border-color:var(--coral)}
+.filterrow{margin-top:10px;display:flex;align-items:center;gap:10px}
+.filterrow select{max-width:320px;padding:10px 12px;background:var(--sand-3)}
+.descr{margin:2px 0 10px;white-space:pre-wrap;line-height:1.4;color:var(--espresso-2)}
+.nameinp{width:170px;padding:8px 10px}
 </style>
 </head>
 <body>
@@ -261,7 +268,8 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
       <input id="q" type="search" placeholder="Cerca per nome o codice…" autocomplete="off" inputmode="search">
       <button class="icon-btn" id="scanSearch" title="Scansiona codice a barre" aria-label="Scansiona">📷</button>
     </div>
-    <div class="hint">Cerca per nome, codice prodotto, codice rivenditore, codice personalizzato o codice a barre.</div>
+    <div class="hint">Cerca per nome, descrizione, distributore, codice prodotto, codice rivenditore, codice personalizzato o codice a barre.</div>
+    <div class="filterrow hidden" id="distFilterWrap"><select id="distFilter" aria-label="Filtra per distributore"></select></div>
 
     <div class="tiles" id="tiles"></div>
 
@@ -295,10 +303,14 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
       <div><label>Prezzo di vendita € *</label><input name="prezzoVendita" inputmode="decimal" required placeholder="0,00"></div>
       <div><label>Posizione (scaffale)</label><input name="posizione" maxlength="60"></div>
     </div>
+    <label>Distributore</label>
+    <div class="with-scan"><select name="distributoreId"></select><button type="button" class="icon-btn" id="addDistQuick" title="Nuovo distributore" aria-label="Nuovo distributore">＋</button></div>
     <div class="row2">
       <div><label>Quantità in negozio</label><input name="qtaNegozio" inputmode="numeric" value="0"></div>
       <div><label>Quantità in magazzino</label><input name="qtaMagazzino" inputmode="numeric" value="0"></div>
     </div>
+    <label>Descrizione</label>
+    <textarea name="descrizione" maxlength="600" placeholder="Note sull'articolo (materiale, misure, colore…)"></textarea>
     <div class="sec-own">
       <div class="tag">Solo titolare</div>
       <label style="margin-top:6px">Prezzo di acquisto €</label>
@@ -362,6 +374,14 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
     <div class="row2"><input name="nome" placeholder="Nome" maxlength="40" required><input name="pin" placeholder="PIN (vuoto = solo titolare)" inputmode="numeric" maxlength="4"></div>
     <div class="ferr" id="staffErr"></div>
     <div class="acts"><button type="submit" class="btn p">Aggiungi</button></div>
+  </form>
+  <label style="margin-top:26px">Distributori</label>
+  <p class="hint" style="margin:2px 0 6px">L'elenco da cui scegliere nella scheda prodotto. Rinominando un distributore, cambia su tutti i suoi prodotti.</p>
+  <div id="distList"></div>
+  <form id="distAdd" autocomplete="off" style="margin-top:12px">
+    <label>Aggiungi distributore</label>
+    <div class="with-scan"><input name="nome" placeholder="Nome del distributore" maxlength="60" required><button type="submit" class="btn p">Aggiungi</button></div>
+    <div class="ferr" id="distErr"></div>
   </form>
   <div class="acts" style="margin-top:6px"><button type="button" class="btn" id="setClose">Chiudi</button></div>
 </div></div>
@@ -458,7 +478,7 @@ function onUser(user){
   $('#whoRole').textContent = role==='titolare' ? 'Titolare' : 'Personale';
   $('#loginOverlay').classList.add('hidden'); $('#app').classList.remove('hidden');
   $('#loginBtn').disabled=false; $('#loginBtn').textContent='Entra';
-  buildTiles(); startProducts(); startStaff();
+  buildTiles(); startDistributori(); startProducts(); startStaff();
 }
 
 /* ── Home: tessere ── */
@@ -498,7 +518,7 @@ function norm(s){ return String(s==null?'':s).toLowerCase().normalize('NFD').rep
 var CODE_KEYS=['codiceProdotto','codiceRivenditore','codiceCustom','barcode'];
 function matches(p,q){
   var terms=q.split(/\s+/).filter(Boolean);
-  var hay=norm([p.nome].concat(CODE_KEYS.map(function(k){return p[k];})).join(' '));
+  var hay=norm([p.nome,p.descrizione,distName(p)].concat(CODE_KEYS.map(function(k){return p[k];})).join(' '));
   return terms.every(function(t){ return hay.indexOf(t)>=0; });
 }
 function rank(p,q){
@@ -507,31 +527,32 @@ function rank(p,q){
   return 2;
 }
 function renderResults(){
-  var q=norm($('#q').value);
+  var q=norm($('#q').value), df=$('#distFilter').value;
   var wrap=$('#resultsWrap');
-  if(!q){ wrap.classList.add('hidden'); return; }
+  if(!q && !df){ wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
-  var list=products.filter(function(p){return matches(p,q);}).sort(function(a,b){
-    return rank(a,q)-rank(b,q) || String(a.nome).localeCompare(String(b.nome),'it');
+  var list=products.filter(function(p){ return (!df || p.distributoreId===df) && (!q || matches(p,q)); }).sort(function(a,b){
+    return (q?rank(a,q)-rank(b,q):0) || String(a.nome).localeCompare(String(b.nome),'it');
   });
-  $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati') : '';
-  $('#results').innerHTML = list.length ? list.slice(0,100).map(function(p){
-    var codes=[p.codiceProdotto&&'Cod. '+p.codiceProdotto, p.codiceRivenditore&&'Riv. '+p.codiceRivenditore, p.codiceCustom&&'Pers. '+p.codiceCustom, p.barcode&&'▮ '+p.barcode].filter(Boolean).join(' · ');
+  $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati')+(list.length>200?' — mostrati i primi 200, restringi la ricerca':'') : '';
+  $('#results').innerHTML = list.length ? list.slice(0,200).map(function(p){
+    var codes=[p.codiceProdotto&&'Cod. '+p.codiceProdotto, p.codiceRivenditore&&'Riv. '+p.codiceRivenditore, p.codiceCustom&&'Pers. '+p.codiceCustom, p.barcode&&'▮ '+p.barcode, distName(p)].filter(Boolean).join(' · ');
     return '<button class="res" data-id="'+esc(p.id)+'"><div class="info"><div class="nm">'+esc(p.nome)+'</div><div class="codes">'+esc(codes||'Nessun codice')+'</div></div>'
       +'<div class="qty"><div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">Negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">Magazzino<b>'+(p.qtaMagazzino|0)+'</b></div></div>'
       +'<div class="pr">'+eur.format(p.prezzoVendita||0)+'</div></button>';
   }).join('') : '<div class="empty">'+(products.length ? 'Nessun risultato.' : 'Ancora nessun prodotto.'+(role==='titolare'?' Usa «Nuovo prodotto» per iniziare.':''))+'</div>';
 }
 $('#q').addEventListener('input',renderResults);
+$('#distFilter').addEventListener('change',renderResults);
 $('#results').addEventListener('click',function(e){ var b=e.target.closest('.res'); if(b) openView(b.dataset.id); });
 
 /* ── Scheda prodotto ── */
 function openView(id){
   var p=byId[id]; if(!p) return;
   var sh=$('#viewSheet');
-  var rows=[['Codice prodotto',p.codiceProdotto],['Codice rivenditore',p.codiceRivenditore],['Codice personalizzato',p.codiceCustom],['Codice a barre',p.barcode],['Posizione',p.posizione]]
+  var rows=[['Codice prodotto',p.codiceProdotto],['Codice rivenditore',p.codiceRivenditore],['Codice personalizzato',p.codiceCustom],['Codice a barre',p.barcode],['Distributore',distName(p)],['Posizione',p.posizione]]
     .filter(function(r){return r[1];}).map(function(r){return '<dt>'+r[0]+'</dt><dd>'+esc(r[1])+'</dd>';}).join('');
-  sh.innerHTML='<h3>'+esc(p.nome)+'</h3>'
+  sh.innerHTML='<h3>'+esc(p.nome)+'</h3>'+(p.descrizione?'<div class="descr">'+esc(p.descrizione)+'</div>':'')
    +'<div class="res" style="cursor:default;border:none;background:none;padding:0"><div class="pr" style="font-size:30px">'+eur.format(p.prezzoVendita||0)+'</div></div>'
    +'<div class="bigqty"><div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">In negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">In magazzino<b>'+(p.qtaMagazzino|0)+'</b></div></div>'
    +'<dl class="det">'+rows+'</dl><div id="costRow"></div>'
@@ -561,7 +582,8 @@ function openForm(id){
   $('#formTitle').textContent = id ? 'Modifica prodotto' : 'Nuovo prodotto';
   $('#delBtn').classList.toggle('hidden',!id); $('#ferr').textContent='';
   pf.reset();
-  ['nome','codiceProdotto','codiceRivenditore','codiceCustom','barcode','posizione'].forEach(function(k){ pf[k].value = p&&p[k]||''; });
+  ['nome','codiceProdotto','codiceRivenditore','codiceCustom','barcode','posizione','descrizione'].forEach(function(k){ pf[k].value = p&&p[k]||''; });
+  pf.distributoreId.value = (p && distById[p.distributoreId]) ? p.distributoreId : '';
   pf.prezzoVendita.value = p? fmtIn(p.prezzoVendita) : '';
   pf.qtaNegozio.value = p? (p.qtaNegozio|0) : 0;
   pf.qtaMagazzino.value = p? (p.qtaMagazzino|0) : 0;
@@ -585,6 +607,7 @@ pf.addEventListener('submit',function(e){
   if(f.prezzoAcquisto.value.trim()!=='' && pa==null){ err.textContent='Prezzo di acquisto non valido.'; return; }
   var rec={ nome:nome, codiceProdotto:f.codiceProdotto.value.trim(), codiceRivenditore:f.codiceRivenditore.value.trim(),
     codiceCustom:f.codiceCustom.value.trim(), barcode:f.barcode.value.trim(), posizione:f.posizione.value.trim(),
+    descrizione:f.descrizione.value.trim().slice(0,600), distributoreId:f.distributoreId.value||'',
     prezzoVendita:pv, qtaNegozio:intv(f.qtaNegozio.value), qtaMagazzino:intv(f.qtaMagazzino.value),
     aggiornatoIl:firebase.firestore.FieldValue.serverTimestamp() };
   // codici univoci: stesso codice prodotto o codice a barre su due articoli renderebbe la ricerca ambigua
@@ -639,6 +662,74 @@ function scan(){
 }
 $('#scanSearch').onclick=function(){ scan().then(function(c){ if(c){ $('#q').value=c; renderResults(); } }); };
 
+/* ── Distributori ── */
+var distributori=[], distById={}, unsubDist=null, pendingDist=null;
+function distName(p){ var d=p && p.distributoreId && distById[p.distributoreId]; return d ? d.nome : ''; }
+function startDistributori(){
+  if(unsubDist) unsubDist();
+  unsubDist=fdb.collection('distributori').onSnapshot(function(snap){
+    distributori=snap.docs.map(function(d){ var o=d.data(); o.id=d.id; return o; })
+      .sort(function(a,b){ return String(a.nome).localeCompare(String(b.nome),'it'); });
+    distById={}; distributori.forEach(function(d){ distById[d.id]=d; });
+    fillDistSelects(); renderResults();
+    if($('#setOv').classList.contains('show')) renderDist();
+  },function(err){ console.warn('distributori:',err.code); });
+}
+function fillDistSelects(){
+  var opts=distributori.map(function(d){ return '<option value="'+esc(d.id)+'">'+esc(d.nome)+'</option>'; }).join('');
+  var f=$('#distFilter'), cur=f.value;
+  f.innerHTML='<option value="">Tutti i distributori</option>'+opts; f.value=distById[cur]?cur:'';
+  $('#distFilterWrap').classList.toggle('hidden',!distributori.length);
+  var s=pf.distributoreId, cur2=s.value;
+  s.innerHTML='<option value="">— Nessuno —</option>'+opts;
+  if(pendingDist && distById[pendingDist]){ s.value=pendingDist; pendingDist=null; }
+  else s.value=distById[cur2]?cur2:'';
+}
+function addDistributore(nome,onErr,selectIt){
+  nome=nome.trim();
+  if(!nome){ onErr('Inserisci il nome.'); return null; }
+  if(distributori.some(function(d){ return norm(d.nome)===norm(nome); })){ onErr('Esiste già un distributore con questo nome.'); return null; }
+  var ref=fdb.collection('distributori').doc();
+  if(selectIt) pendingDist=ref.id;   // prima di scrivere: la lista potrebbe aggiornarsi subito
+  ref.set({nome:nome,creatoIl:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){ onErr('Non salvato. Controlla la connessione.'); });
+  return ref.id;
+}
+$('#addDistQuick').onclick=function(){
+  var n=prompt('Nome del nuovo distributore:'); if(n==null) return;
+  var id=addDistributore(n,function(m){ toast(m); },true);
+  if(id) setTimeout(function(){ if(pendingDist===id) pendingDist=null; },4000);
+};
+function renderDist(){
+  $('#distList').innerHTML = distributori.length ? distributori.map(function(d){
+    var n=products.filter(function(p){ return p.distributoreId===d.id; }).length;
+    return '<div class="staffrow" data-id="'+esc(d.id)+'"><div class="sn">'+esc(d.nome)+' <span class="pill" style="display:inline-block;font-size:11px;padding:2px 8px;font-weight:500">'+n+(n===1?' prodotto':' prodotti')+'</span></div><div class="sa"><button class="btn" data-a="ren">Rinomina</button><button class="btn d2" data-a="del">Rimuovi</button></div></div>';
+  }).join('') : '<div class="empty" style="padding:14px">Nessun distributore. Aggiungine uno qui sotto.</div>';
+}
+$('#distList').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  var row=b.closest('.staffrow'), d=distById[row.dataset.id]; if(!d) return;
+  var a=b.dataset.a;
+  if(a==='ren'){
+    row.querySelector('.sa').innerHTML='<input class="nameinp" maxlength="60" autocomplete="off"><button class="btn p" data-a="renok">Salva</button><button class="btn" data-a="renno">Annulla</button>';
+    var i=row.querySelector('.nameinp'); i.value=d.nome; i.focus();
+  } else if(a==='renno'){ renderDist(); }
+  else if(a==='renok'){
+    var v=row.querySelector('.nameinp').value.trim();
+    if(!v){ toast('Inserisci il nome.'); return; }
+    if(distributori.some(function(x){ return x.id!==d.id && norm(x.nome)===norm(v); })){ toast('Esiste già un distributore con questo nome.'); return; }
+    fdb.doc('distributori/'+d.id).update({nome:v}).then(function(){ toast('Rinominato.'); }).catch(function(){ toast('Operazione non riuscita.'); });
+  } else if(a==='del'){
+    var n=products.filter(function(p){ return p.distributoreId===d.id; }).length;
+    if(n>0){ toast('«'+d.nome+'» è usato da '+n+(n===1?' prodotto':' prodotti')+': assegnali prima a un altro distributore.'); return; }
+    if(confirm('Rimuovere «'+d.nome+'»?')) fdb.doc('distributori/'+d.id).delete().catch(function(){ toast('Operazione non riuscita.'); });
+  }
+});
+$('#distAdd').addEventListener('submit',function(e){
+  e.preventDefault();
+  var f=e.target, err=$('#distErr'); err.textContent='';
+  if(addDistributore(f.nome.value,function(m){ err.textContent=m; })) f.reset();
+});
+
 /* ── Personale e PIN ── */
 var staff=[], unsubStaff=null;
 function hex(buf){ return Array.prototype.map.call(new Uint8Array(buf),function(b){return ('0'+b.toString(16)).slice(-2);}).join(''); }
@@ -658,7 +749,7 @@ function startStaff(){
     if(mv && $('#moveOv').classList.contains('show')) renderMove();
   },function(err){ console.warn('personale:',err.code); });
 }
-function openSettings(){ renderStaff(); $('#staffErr').textContent=''; $('#setOv').classList.add('show'); }
+function openSettings(){ renderStaff(); renderDist(); $('#staffErr').textContent=''; $('#setOv').classList.add('show'); }
 $('#setClose').onclick=function(){ $('#setOv').classList.remove('show'); };
 function renderStaff(){
   $('#staffList').innerHTML = staff.length ? staff.map(function(s){

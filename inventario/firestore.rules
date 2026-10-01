@@ -35,6 +35,12 @@ service cloud.firestore {
       }
     }
 
+    // Distributori: elenco per il menu a tendina dei prodotti. Lo vedono tutti, lo modifica solo il titolare.
+    match /distributori/{id} {
+      allow read: if titolare() || personale();
+      allow write: if titolare();
+    }
+
     // Dipendenti e PIN (salvato come hash salato). Lo legge anche il personale
     // per verificare il PIN sul dispositivo; lo modifica solo il titolare.
     match /personale/{id} {
