@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Solo i due account ufficiali. Qualsiasi altro utente Firebase viene rifiutato.
+    function titolare() {
+      return request.auth != null
+        && request.auth.token.email.lower() == 'proprietario@edicolamannelli.com';
+    }
+    function personale() {
+      return request.auth != null
+        && request.auth.token.email.lower() == 'staff@edicolamannelli.com';
+    }
+
+    match /prodotti/{id} {
+      allow read: if titolare() || personale();
+      allow create, update, delete: if titolare();
+
+      // Prezzo di acquisto: visibile SOLO al titolare.
+      match /privato/{doc} {
+        allow read, write: if titolare();
+      }
+    }
+  }
+}
