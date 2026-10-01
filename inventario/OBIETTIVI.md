@@ -15,23 +15,24 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - Staff see the sale price only (no purchase price, margins or totals).
 
 ## DONE
-- [x] Local-only Giacenza prototype (`inventario/index.html`, localStorage, JSON/CSV export + restore). Will be superseded by the Firebase version.
+- [x] Local-only prototype (replaced by the Firebase app; still in git history).
+- [x] Firebase app v1: splash sequence, login (Firebase Auth), banner, search, tiles, product add/edit/view (Firestore), camera barcode scan, owner-only purchase price. `config.js` + `firestore.rules`. Tested with an in-memory Firebase stand-in; NOT yet tested against the real project or on a real camera.
 
 ## 1. Look and feel
-- [ ] Start-up: Viridian black splash (copied from Verdi) → Edicola Mannelli splash → login
-- [ ] Viridian splash as a single on/off setting (for handover)
-- [ ] Login identical to Verdi: staff = password only, owner = email + password toggle at the bottom
+- [x] Start-up: Viridian black splash (copied from Verdi) → Edicola Mannelli splash → login
+- [x] Viridian splash as a single on/off setting (`mostraSplashViridian` in config.js)
+- [x] Login like Verdi: staff = password only, owner = email + password toggle at the bottom (no geofence)
 - [x] Owner address: Proprietario@EdicolaMannelli.com
-- [ ] Top banner after login: Duomo logo + location, like the Edicola POS
+- [x] Top banner after login: logo + Duomo + clock + role/logout
 
 ## 2. Access
-- [ ] Two roles: owner (full) / staff (limited), enforced in Firestore/Storage rules, not just hidden in the UI
+- [x] Two roles enforced in `firestore.rules` (must be published in the Firebase console)
 - [x] Staff see sale price only. Still open: may staff edit/add products or delete? (assumed: no)
 
 ## 3. Products
-- [ ] Prominent search bar at the top; searches name + product code + retailer code + custom code
-- [ ] Product entry page: name, photo, product code, retailer code, custom code, purchase price, sale price, quantities, location
-- [ ] Barcode scan by camera, typed entry as fallback
+- [x] Prominent search bar at the top; searches name + 3 codes + barcode
+- [x] Product entry page (no photo yet — needs Storage): name, codes, prices, shop/storage quantities, shelf position
+- [x] Barcode scan by camera (BarcodeDetector, ZXing fallback), typed entry as fallback — camera untested on real devices
 - [x] Location model decided: separate quantities, shop + storage, for every item
 
 ## 4. Stock movements
