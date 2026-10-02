@@ -249,6 +249,13 @@ table.rt .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-num
 .bars .track{height:14px;background:var(--sand-2);border-radius:7px;overflow:hidden}
 .bars .fill{height:100%;background:var(--espresso);border-radius:7px}
 .bars .val{text-align:right;font-variant-numeric:tabular-nums}
+.repnav{display:inline-flex;align-items:center;gap:6px}
+.repnav .btn{padding:8px 12px}
+.repnav .btn:disabled{opacity:.35}
+#repLabel{font-weight:700;min-width:170px;text-align:center;text-transform:capitalize}
+.dl{font-size:12px;font-weight:700}
+.dl.up{color:#2f7d4f}
+.dl.down{color:var(--danger)}
 #repInv{display:none}
 @media (max-width:640px){.bars .bar{grid-template-columns:90px 1fr 70px}}
 @media print{
@@ -471,7 +478,8 @@ table.rt .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-num
 <div class="ov" id="repOv"><div class="sheet rep">
   <div class="rep-head noprint"><h3>Report</h3><span class="draft">Bozza · anteprima</span></div>
   <div class="rep-bar noprint">
-    <select id="repPeriod" aria-label="Periodo"><option value="0">Tutto lo storico</option><option value="30">Ultimi 30 giorni</option><option value="7">Ultimi 7 giorni</option></select>
+    <select id="repPeriod" aria-label="Periodo"><option value="all">Tutto lo storico</option><option value="year">Anno</option><option value="quarter">Trimestre</option><option value="month">Mese</option><option value="week">Settimana</option></select>
+    <span class="repnav hidden" id="repNav"><button type="button" class="btn" id="repPrev" aria-label="Periodo precedente">◀</button><span id="repLabel"></span><button type="button" class="btn" id="repNext" aria-label="Periodo successivo">▶</button></span>
     <button class="btn" id="repPrint">🖨 Stampa report</button>
     <button class="btn" id="repInvPrint">🖨 Inventario completo</button>
     <button class="btn" id="repCsv">⬇ Esporta CSV</button>
@@ -1260,6 +1268,7 @@ function loadCosts(){
   });
 }
 function openReport(){
+  repState={type:'all',anchor:new Date()}; $('#repPeriod').value='all'; $('#repNav').classList.add('hidden');
   $('#repOv').classList.add('show'); $('#repBody').innerHTML='<div class="none">Caricamento dei dati…</div>';
   Promise.all([loadCosts(),fdb.collection('storico').get()]).then(function(r){
     repData={costs:r[0],storico:r[1].docs.map(function(d){ return d.data(); }),at:new Date()};
@@ -1267,23 +1276,61 @@ function openReport(){
   }).catch(function(er){ console.warn('report:',er&&er.code); $('#repBody').innerHTML='<div class="none">Impossibile caricare i dati del report. Controlla la connessione e le regole del database.</div>'; });
 }
 $('#repClose').onclick=function(){ $('#repOv').classList.remove('show'); };
-$('#repPeriod').addEventListener('change',function(){ if(repData) renderReport(); });
 function tbl(heads,rows,numCols){
   if(!rows.length) return '<div class="none">Nessun articolo.</div>';
   return '<table class="rt"><thead><tr>'+heads.map(function(h,i){ return '<th'+(numCols.indexOf(i)>=0?' class="n"':'')+'>'+esc(h)+'</th>'; }).join('')+'</tr></thead><tbody>'
     +rows.map(function(r){ return '<tr>'+r.map(function(c,i){ return '<td'+(numCols.indexOf(i)>=0?' class="n"':'')+'>'+c+'</td>'; }).join('')+'</tr>'; }).join('')+'</tbody></table>';
 }
-function computeReport(days){
-  var costs=repData.costs, cutoff=null;
-  if(days>0){ var d=new Date(); d.setDate(d.getDate()-days); cutoff=isoDay(d); }
-  var sold={}, dates=[];
+var MESI=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+var MESI3=['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+var repState={type:'all',anchor:new Date()};
+function mondayOf(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; }
+function isoWeekNo(d){ var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); t.setUTCDate(t.getUTCDate()+4-(t.getUTCDay()||7)); var y0=new Date(Date.UTC(t.getUTCFullYear(),0,1)); return Math.ceil(((t-y0)/86400000+1)/7); }
+function periodRange(type,a){
+  var y=a.getFullYear(), m=a.getMonth();
+  if(type==='all') return {from:null,to:null,label:'Tutto lo storico'};
+  if(type==='year') return {from:y+'-01-01',to:y+'-12-31',label:String(y)};
+  if(type==='quarter'){ var q=Math.floor(m/3); return {from:isoDay(new Date(y,q*3,1)),to:isoDay(new Date(y,q*3+3,0)),label:(q+1)+'° trimestre '+y+' ('+MESI3[q*3]+'–'+MESI3[q*3+2]+')'}; }
+  if(type==='month') return {from:isoDay(new Date(y,m,1)),to:isoDay(new Date(y,m+1,0)),label:MESI[m]+' '+y};
+  var mo=mondayOf(a), su=new Date(mo.getFullYear(),mo.getMonth(),mo.getDate()+6);
+  return {from:isoDay(mo),to:isoDay(su),label:'Settimana '+isoWeekNo(mo)+' · '+mo.getDate()+(mo.getMonth()!==su.getMonth()?' '+MESI3[mo.getMonth()]:'')+'–'+su.getDate()+' '+MESI3[su.getMonth()]+' '+su.getFullYear()};
+}
+function shiftAnchor(type,a,dir){
+  var y=a.getFullYear(), m=a.getMonth(), d=a.getDate();
+  if(type==='year') return new Date(y+dir,0,1);
+  if(type==='quarter') return new Date(y,m+3*dir,1);
+  if(type==='month') return new Date(y,m+dir,1);
+  return new Date(y,m,d+7*dir);
+}
+function salesBounds(){ var ds=repData.storico.filter(function(h){ return h.tipo==='vendita'; }).map(function(h){ return String(h.data); }).sort(); return ds.length?{first:ds[0],last:ds[ds.length-1]}:null; }
+function periodTotals(range){
+  var t={pcs:0,rev:0,mar:0,car:0,sales:{}};
   repData.storico.forEach(function(h){
-    if(h.tipo!=='vendita') return;
-    if(cutoff && String(h.data)<cutoff) return;
-    sold[h.prodottoId]=(sold[h.prodottoId]||0)+(h.qta|0); dates.push(String(h.data));
+    var d=String(h.data); if(range.from && (d<range.from||d>range.to)) return;
+    var q=h.qta|0;
+    if(h.tipo==='carico'){ t.car+=q; return; }
+    var p=byId[h.prodottoId], price=p?(p.prezzoVendita||0):0, cost=(h.prodottoId in repData.costs)?repData.costs[h.prodottoId]:null;
+    t.pcs+=q; t.rev+=q*price; if(cost!==null) t.mar+=q*(price-cost);
+    t.sales[h.prodottoId]=(t.sales[h.prodottoId]||0)+q;
   });
-  dates.sort();
-  var R={items:[],kpi:{val:0,rev:0,pcs:0,mag:0,neg:0,magVal:0,negVal:0,stock:0,zero:0,noPrice:0,noCost:0,recount:0},cats:{},dists:{},cutoff:cutoff,from:dates[0],to:dates[dates.length-1]};
+  return t;
+}
+function delta(cur,prev){
+  if(!prev) return cur?'<span class="dl up">nuovo</span>':'';
+  var pc=Math.round((cur-prev)/prev*100);
+  return '<span class="dl '+(pc>=0?'up':'down')+'">'+(pc>=0?'▲ ':'▼ ')+Math.abs(pc)+'% vs periodo prec.</span>';
+}
+function setRepType(type){
+  repState.type=type;
+  var b=salesBounds(); repState.anchor=b?new Date(b.last+'T12:00:00'):new Date();   // si parte dall'ultimo periodo con dati
+  renderReport();
+}
+$('#repPeriod').addEventListener('change',function(){ if(repData) setRepType(this.value); });
+$('#repPrev').onclick=function(){ repState.anchor=shiftAnchor(repState.type,repState.anchor,-1); renderReport(); };
+$('#repNext').onclick=function(){ repState.anchor=shiftAnchor(repState.type,repState.anchor,1); renderReport(); };
+function computeReport(range){
+  var costs=repData.costs, T=periodTotals(range), sold=T.sales;
+  var R={T:T,items:[],kpi:{val:0,rev:0,pcs:0,mag:0,neg:0,magVal:0,negVal:0,stock:0,zero:0,noPrice:0,noCost:0,recount:0},cats:{},dists:{},soldCat:{}};
   products.forEach(function(p){
     var neg=p.qtaNegozio|0, mag=p.qtaMagazzino|0, tot=neg+mag, price=p.prezzoVendita||0, cost=(p.id in costs)?costs[p.id]:null;
     var it={p:p,tot:tot,neg:neg,mag:mag,price:price,cost:cost,val:cost!==null?cost*tot:0,rev:price*tot,sold:sold[p.id]||0};
@@ -1292,17 +1339,36 @@ function computeReport(days){
     if(tot>0) k.stock++; else k.zero++;
     if(!price) k.noPrice++; if(cost===null) k.noCost++; if(p.daRicontare) k.recount++;
     var c=p.categoria||'Senza categoria'; var C=R.cats[c]||(R.cats[c]={n:0,pcs:0,val:0,rev:0}); C.n++; C.pcs+=tot; C.val+=it.val; C.rev+=it.rev;
+    R.soldCat[c]=(R.soldCat[c]||0)+it.sold*price;
     var dn=distName(p)||'Senza distributore'; var D=R.dists[dn]||(R.dists[dn]={n:0,pcs:0,val:0,rev:0}); D.n++; D.pcs+=tot; D.val+=it.val; D.rev+=it.rev;
   });
   return R;
 }
 function nameCell(it){ return esc(it.p.nome)+'<br><span style="color:var(--espresso-2);font-size:12px">'+esc(it.p.codiceCustom||it.p.codiceProdotto||'—')+(it.p.categoria?' · '+esc(it.p.categoria):'')+'</span>'; }
+function barsHtml(pairs,fmt){
+  var mx=pairs.length?Math.max(pairs[0][1],0.0001):1;
+  return '<div class="bars">'+pairs.slice(0,10).map(function(c){ return '<div class="bar"><span>'+esc(c[0])+'</span><span class="track"><span class="fill" style="display:block;width:'+Math.round(c[1]/mx*100)+'%"></span></span><span class="val">'+fmt(c[1])+'</span></div>'; }).join('')+'</div>';
+}
 function renderReport(){
-  var days=parseInt($('#repPeriod').value,10)||0, R=computeReport(days), k=R.kpi;
+  var type=repState.type, range=periodRange(type,repState.anchor), prevRange=type==='all'?null:periodRange(type,shiftAnchor(type,repState.anchor,-1));
+  $('#repPeriod').value=type; $('#repNav').classList.toggle('hidden',type==='all'); $('#repLabel').textContent=range.label;
+  if(type!=='all'){ var nx=periodRange(type,shiftAnchor(type,repState.anchor,1)); $('#repNext').disabled = nx.from>isoDay(new Date()); }
+  var R=computeReport(range), k=R.kpi, T=R.T, PT=prevRange?periodTotals(prevRange):null, sb=salesBounds();
   var margin=k.rev-k.val, pct=k.rev>0?Math.round(margin/k.rev*100):0;
-  var periodTxt = days>0 ? 'ultimi '+days+' giorni' : (R.from?'dal '+itDate(R.from)+' al '+itDate(R.to):'storico completo');
-  var h='<div class="asof">Edicola Mannelli · Duomo — report del '+esc(repData.at.toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'}))+' · vendite: '+esc(periodTxt)+'</div>';
-  h+='<div class="kpis">'
+  var h='<div class="asof">Edicola Mannelli · Duomo — report del '+esc(repData.at.toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'}))+' · periodo: '+esc(range.label)+'</div>';
+  // vendite del periodo
+  h+='<h4 style="margin-top:8px">Vendite del periodo</h4>';
+  if(!T.pcs && !T.car){
+    h+='<div class="none">Nessun movimento registrato in questo periodo.'+(sb?' I dati disponibili vanno dal '+itDate(sb.first)+' al '+itDate(sb.last)+'.':'')+'</div>';
+  } else {
+    h+='<div class="kpis">'
+      +'<div class="kpi"><div class="l">Pezzi venduti</div><div class="v">'+fmtN(T.pcs)+'</div><div class="s">'+(PT?delta(T.pcs,PT.pcs):'')+'</div></div>'
+      +'<div class="kpi"><div class="l">Incasso</div><div class="v">'+eur.format(T.rev)+'</div><div class="s">'+(PT?delta(T.rev,PT.rev):'al prezzo attuale')+'</div></div>'
+      +'<div class="kpi"><div class="l">Margine</div><div class="v">'+eur.format(T.mar)+'</div><div class="s">'+(PT?delta(T.mar,PT.mar):'dove il costo è noto')+'</div></div>'
+      +'<div class="kpi"><div class="l">Pezzi caricati</div><div class="v">'+fmtN(T.car)+'</div><div class="s">'+(PT?delta(T.car,PT.car):'merce arrivata')+'</div></div></div>';
+  }
+  // magazzino oggi
+  h+='<h4>Magazzino oggi</h4><div class="kpis">'
     +'<div class="kpi"><div class="l">Valore a costo</div><div class="v">'+eur.format(k.val)+'</div><div class="s">magazzino '+eur.format(k.magVal)+' · negozio '+eur.format(k.negVal)+'</div></div>'
     +'<div class="kpi"><div class="l">Ricavo potenziale</div><div class="v">'+eur.format(k.rev)+'</div><div class="s">se vendi tutto al prezzo attuale</div></div>'
     +'<div class="kpi"><div class="l">Margine potenziale</div><div class="v">'+eur.format(margin)+'</div><div class="s">'+pct+'% del ricavo</div></div>'
@@ -1310,29 +1376,25 @@ function renderReport(){
     +'<div class="kpi"><div class="l">Articoli</div><div class="v">'+fmtN(R.items.length)+'</div><div class="s">'+fmtN(k.stock)+' con scorta · '+fmtN(k.zero)+' a zero</div></div></div>';
   var warns=[];
   if(k.noPrice) warns.push(k.noPrice+' articoli senza prezzo di vendita: il ricavo è sottostimato.');
-  if(k.noCost) warns.push(k.noCost+' articoli senza prezzo di acquisto: il valore a costo è sottostimato.');
+  if(k.noCost) warns.push(k.noCost+' articoli senza prezzo di acquisto: il valore a costo e il margine sono sottostimati.');
   if(k.recount) warns.push(k.recount+' articoli «da ricontare»: le quantità non sono affidabili.');
   if(k.zero>0) warns.push(k.zero+' articoli a zero: se non sono mai stati contati, valore e margine sono più bassi del reale.');
   h+=warns.map(function(w){ return '<div class="repwarn">⚠ '+esc(w)+'</div>'; }).join('');
-  // valore per categoria (barre)
-  var cats=Object.keys(R.cats).map(function(c){ return [c,R.cats[c]]; }).sort(function(a,b){ return b[1].val-a[1].val; });
-  var maxv=cats.length?Math.max(cats[0][1].val,1):1;
-  h+='<h4>Valore a costo per categoria</h4><div class="bars">'+cats.slice(0,10).map(function(c){ return '<div class="bar"><span>'+esc(c[0])+'</span><span class="track"><span class="fill" style="display:block;width:'+Math.round(c[1].val/maxv*100)+'%"></span></span><span class="val">'+eur.format(c[1].val)+'</span></div>'; }).join('')+'</div>';
-  // più venduti
+  // incasso per categoria (periodo) e valore per categoria (oggi)
+  var soldCats=Object.keys(R.soldCat).filter(function(c){ return R.soldCat[c]>0; }).map(function(c){ return [c,R.soldCat[c]]; }).sort(function(a,b){ return b[1]-a[1]; });
+  if(soldCats.length) h+='<h4>Incasso per categoria nel periodo</h4>'+barsHtml(soldCats,function(v){ return eur.format(v); });
+  var cats=Object.keys(R.cats).map(function(c){ return [c,R.cats[c].val]; }).sort(function(a,b){ return b[1]-a[1]; });
+  h+='<h4>Valore a costo in magazzino per categoria</h4>'+barsHtml(cats,function(v){ return eur.format(v); });
   var top=R.items.filter(function(i){ return i.sold>0; }).sort(function(a,b){ return b.sold-a.sold; }).slice(0,10);
-  h+='<h4>Più venduti</h4>'+tbl(['Articolo','Venduti','Incasso','Margine'],top.map(function(i){ return [nameCell(i),fmtN(i.sold),eur.format(i.sold*i.price),i.cost!==null?eur.format(i.sold*(i.price-i.cost)):'—']; }),[1,2,3]);
-  // esauriti che vendevano
+  h+='<h4>Più venduti nel periodo</h4>'+tbl(['Articolo','Venduti','Incasso','Margine'],top.map(function(i){ return [nameCell(i),fmtN(i.sold),eur.format(i.sold*i.price),i.cost!==null?eur.format(i.sold*(i.price-i.cost)):'—']; }),[1,2,3]);
   var out=R.items.filter(function(i){ return i.tot<=0 && i.sold>0; }).sort(function(a,b){ return b.sold-a.sold; }).slice(0,10);
   h+='<h4>Esauriti che vendevano</h4>'+tbl(['Articolo','Venduti nel periodo','Scorta min.'],out.map(function(i){ return [nameCell(i),fmtN(i.sold),i.p.scortaMin?fmtN(i.p.scortaMin):'—']; }),[1,2]);
-  // sotto scorta minima
   var low=R.items.filter(function(i){ return i.tot>0 && i.p.scortaMin && i.tot<=i.p.scortaMin; }).sort(function(a,b){ return (a.tot/a.p.scortaMin)-(b.tot/b.p.scortaMin); }).slice(0,10);
-  h+='<h4>Sotto scorta minima</h4>'+tbl(['Articolo','Scorta','Minima'],low.map(function(i){ return [nameCell(i),fmtN(i.tot),fmtN(i.p.scortaMin)]; }),[1,2]);
-  // fermi
+  h+='<h4>Sotto scorta minima (oggi)</h4>'+tbl(['Articolo','Scorta','Minima'],low.map(function(i){ return [nameCell(i),fmtN(i.tot),fmtN(i.p.scortaMin)]; }),[1,2]);
   var slow=R.items.filter(function(i){ return i.tot>0 && i.sold===0 && i.val>0; }).sort(function(a,b){ return b.val-a.val; }).slice(0,10);
   var slowAll=R.items.filter(function(i){ return i.tot>0 && i.sold===0; });
   h+='<h4>Fermi: scorta senza vendite nel periodo</h4><div class="asof">'+slowAll.length+' articoli, '+eur.format(slowAll.reduce(function(a,i){ return a+i.val; },0))+' di merce a costo. I 10 più costosi:</div>'
     +tbl(['Articolo','Pezzi','Valore a costo'],slow.map(function(i){ return [nameCell(i),fmtN(i.tot),eur.format(i.val)]; }),[1,2]);
-  // per categoria / distributore
   function grp(o,label){ var rows=Object.keys(o).map(function(n){ return [n,o[n]]; }).sort(function(a,b){ return b[1].val-a[1].val; });
     return tbl([label,'Articoli','Pezzi','Valore a costo','Ricavo potenziale'],rows.map(function(r){ return [esc(r[0]),fmtN(r[1].n),fmtN(r[1].pcs),eur.format(r[1].val),eur.format(r[1].rev)]; }),[1,2,3,4]); }
   h+='<h4>Per categoria</h4>'+grp(R.cats,'Categoria');

@@ -45,13 +45,19 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - Note: a purchase price of 0 counts as "missing" in the report. Sales takings use the CURRENT sale price (no price history yet).
 - Next for reports: stock-count import (magazzino/negozio), Carico/Vendita entry screens so the numbers stay live, reasons for stock decreases.
 
+## Batch 5 (built on the branch, NOT merged — Chuck says when)
+- [x] Report periods: Tutto / Anno / Trimestre / Mese / Settimana, calendar-based with ◀ ▶ arrows (weeks Mon-Sun, ISO week number; quarters and months by calendar; future periods locked). Starts at the latest period that has sales. Each period compares with the previous one (▲/▼ %, "nuovo" when there is nothing before).
+- [x] Report layout: "Vendite del periodo" (pieces sold, takings, margin, pieces received) is separate from "Magazzino oggi" (stock snapshot: unaffected by the period). New chart "Incasso per categoria nel periodo". Top sellers / sold-out / slow stock follow the period; below-minimum is today's snapshot. Empty periods say so and show the data range.
+- [x] Verified vs an independent calculation: Mese Sept = 2,507 pcs / EUR 18,343.30 / margin EUR 12,226.75 / 1,347 received; Settimana 40 = 734 pcs, -21% vs week 39 (932 pcs). Tests: screens 138 across 7 suites; no new rules.
+- Later: custom date range; compare against the same period last year once there is a year of data.
+
 ## Ideas parked (pinned, not started)
 - **Low-stock alerts that don't drown in zeros** (Chuck, Oct 2). Today: "Riordina" tag only when stock > 0 and <= scorta minima (39 items), report lists "Esauriti che vendevano" (only items that actually sold) -> no 400 alerts by design. Proposed next: (1) alert only on items that SOLD in the last ~60 days (auto-relevance); (2) per-item "Non avvisare" with snooze (30 days / forever: seasonal, discontinued); (3) one grouped digest "Da riordinare" per distributor, not per-item badges; (4) optional default minimum per category (e.g. magnets: 3 of each design that sells) instead of item by item; (5) later, "days of cover" from sales velocity. Staff never see alerts.
 - **Reorder list per distributor** — printable / shareable shopping list ("Lista d'ordine Pier") with a suggested quantity (to reach 2x minimum, or last 30 days' sales). Matches her paperwork-by-distributor, and she buys in person (Chinatown) so a list on the phone/paper is what she needs.
 - **Report periods** (Chuck, Oct 2): replace 7 days / 30 days / all with Settimana, Mese, Trimestre, Anno, Tutto (+ maybe custom range). Calendar-based with prev/next arrows (Ottobre 2026 < >), and comparison with the previous period (up/down %). Caveat: history so far is 7-30 Sep 2026 only; longer periods look identical until Carico / Vendita entry keeps data flowing.
 - **Carico / Vendita entry screens** (dated, distributor, N.DOC, note, reason) — the data pipeline that keeps every report alive; replaces the CARICA / SCARICA tabs.
 - **Count mode ("Conta")** — walk the shelf, scan, type the counted quantity, see the difference, confirm. Replaces the CSV count import for tablets; settles magnets and the 15 recounts.
-- **Print barcode labels from her own codes** (P1, M1...) so the camera scan works without EAN barcodes: Code128 label per item (code + name + price).
+- **Print barcode labels from her own codes** (P1, M1...) so the camera scan works without EAN barcodes: Code128 label per item (code + name + price). Chuck: Federica's mother has already talked about wanting a printed barcode on everything — a priority to show them. (Scan lookup already matches the custom code, so a label with the code is enough.)
 - **One-tap backup** (owner): download products + history (+ photos optional) as a file. Firebase keeps data safe from lost devices but not from accidental deletes.
 - Later: price history (so past takings use the price at the time), handover checklist to Federica's own Firebase account.
 
