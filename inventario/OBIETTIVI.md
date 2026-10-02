@@ -38,6 +38,10 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - Merge needs: rules re-published in Firebase first.
 - Later: the 25 photos in the old POS can come over with the import. Invoice scans (PDF) still need Storage/Blaze.
 
+## Ideas parked (pinned, not started)
+- **Category quick-tabs under the search bar** (idea from Chuck, Oct 2): one-tap tabs for the big families (Portachiavi / keychains, Magliette / t-shirts, Calamite / magnets, Tazze, Piatti...) so staff and Federica can narrow to an item type fast. Builds on the Categoria field and filter that already exist (a dropdown today). Decide later: which families get a tab (probably the biggest by item count: Calamite 85, Gongoli 42, Cappelli 24...), tabs vs. scrollable chips on a phone, whether a tab can combine with the distributor filter.
+- Finer sub-categories inside a family (e.g. Calamite -> resina / metallo / gomma) once we see the imported data on screen.
+
 ## 1. Look and feel
 - [x] Start-up: Viridian black splash (copied from Verdi) → Edicola Mannelli splash → login
 - [x] Viridian splash as a single on/off setting (`mostraSplashViridian` in config.js)
@@ -65,10 +69,27 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 Andrea, Marco, Alessio, Luca, Heber, Fiorella, Sawkat, Made (staff, with PIN). Family (Federica, her mother, her sister): added with the PIN left blank = visible only when logged in as owner. The owner login must also pick a name for every move (no PIN).
 PINs are chosen by the owner and not stored anywhere in the repo.
 
-## 4b. Import (ON HOLD — waiting for Federica's own spreadsheet, which should be cleaner than the old POS catalog)
-- Old catalog (root `index.html`, `PRODUCTS`): 805 items; fields id, name, category, sale price, VAT, emoji; 25 have a photo, 25 have `sizes`. NO codes, quantities or purchase prices. 39 duplicate names.
-- Fallback plan if no spreadsheet arrives: export to a CSV she can fill in (codes, quantities, cost), then an owner-only "Importa" in Impostazioni (preview, batches of 500). Needs new fields: categoria, iva.
-- Open: her scanned images/codes — need a few samples to see how codes are attached.
+## Batch 3 (built on the branch, NOT merged — Chuck says when)
+- [x] Decisions (Chuck, Oct 2): all stock -> Magazzino; staff use the sheet codes (P1, M1...) -> stored as Codice personalizzato; Pier is NOT the only workbook (a second one is coming); load the dated history; negatives -> 0 + flagged for recount.
+- [x] New product fields: Categoria (autocomplete + search filter), Scorta minima (owner sees Esaurito / Riordina tags), Da ricontare flag (+ note, visible to all), codes accept letters.
+- [x] Owner-only Impostazioni -> Importa dati: CSV for products and for dated history; preview first; re-runnable (matches by distributor + code, else name; never overwrites quantities); batches.
+- [x] `storico` collection (owner only): dated carichi/vendite. Owner sees it on the product page. Records only; quantities are not recomputed from it.
+- [x] `tools/convert_workbook.py` turns a PIER-layout workbook into prodotti.csv + storico.csv + DA-CONTROLLARE.xlsx. Generated files hold purchase prices -> never commit them.
+- Result for PIER: 413 products (3,854 pcs to storage, 15 flagged), 491 dated entries (93 carichi 1,347 pcs; 398 vendite 2,507 pcs), 44 items on Federica's checklist, 7 rows skipped (CU11/MMG25/MMG26 blank names, M85 placeholder, R7 134-in/134-out pair, D31 unknown).
+- Tests: rules 55 checks (emulator); screens 91 checks incl. importing the real files.
+- Merge needs: rules re-published in Firebase first (adds `storico`).
+- Still open: Carico / Vendita entry screens (dated, N.DOC, note); second workbook layout; reports; invoices.
+
+## 4b. Import from Federica's spreadsheet (PIER.xlsx) — ROADMAP (steps 1-4 now built, see Batch 3)
+The file is NOT stored in the repo (it contains purchase prices).
+**What the file is:** one workbook per DISTRIBUTOR ("PIER-GADGET NEL MONDO"). Tabs: `PIER` = master stock list (416 product lines: 412 coded + 4 uncoded "Campane metallo ..."; plus a placeholder M85 and a total row to skip); `CARICA` = receipts log (94 lines, 1,481 pcs, dates 23/24/29 Sep 2026); `SCARICA` = sales log (400 lines, 2,642 pcs, dates 7/21/23/24/30 Sep 2026). N.DOC and NOTE columns are empty everywhere.
+**Master columns -> our fields:** CODICE (P1, MI4, ...) -> Codice personalizzato (TBC); COD.FORN. (Art.11) -> Codice rivenditore; CATEGORIA -> NEW Categoria; DESCRIZIONE -> Nome; PR.ACQ. -> prezzo acquisto (owner-only); PR.VEND. -> prezzo vendita; SCORTA MIN. -> NEW Scorta minima; STOCK ATTUALE -> quantity (one number only: shop/storage split unknown); distributor = Pier for all. STATO/VALORE/CARICO/SCARICO/STOCK INIZIALE are computed -> not imported as fields.
+**Sheet totals:** 198 items in stock, 199 at zero, 15 negative; 3,769 pcs net; value at cost EUR 8,978.80 (sheet's own figure).
+**The "date":** only exists in CARICA/SCARICA, as a batch date on the first row of each block (rows below are blank). It belongs to dated receipt/sale ENTRIES, not to the product. We have no Carico / Vendita entries yet -> needed (date, distributor, N.DOC, note).
+**Data to clean (list for Federica):** 4 uncoded campane; M85 placeholder; code `d31` sold but not in master; R7 "Spille pins" 134 received 29 Sep but 134 sold 24 Sep (looks like a mis-posted correction); 15 negative stocks (P6, B7, B11, MI1, MI18, TA2, D34, D39, D40, CA6, GR14, BP2, BP8, G28, CP8) -> recount; 22 items with sale price 0; 78 items without supplier code and inconsistent formats (Art.11 / ART.121 / ESSENSIAL); category typos (MNIATURA, MINIATURA -> MINIATURE; MONETA -> MONETE); 35 category labels -> 32.
+**Steps:** (1) Federica fixes the cleanup list. (2) Build: Categoria + Scorta minima fields; allow letters in code boxes. (3) Build owner-only "Importa" (CSV, preview/dry-run, batches, re-runnable by code so it updates instead of duplicating). (4) Import products, create distributor "Pier Gadget nel Mondo". (5) Build Carico / Vendita entries (dated), then optionally load the 94 + 400 history lines as dated entries so reports have 3 weeks of data.
+**Decisions pending:** where the single stock number goes (Magazzino vs Negozio vs split); which code staff actually use; is Pier the only workbook; import history or start from current stock; negatives -> 0 + recount.
+Old POS catalog (805 items, root index.html) is a different list; the 25 photos in it can come over later.
 
 ## 5. Documents (nice to have)
 - [ ] Upload scanned invoices and purchase receipts (photo or PDF), tagged with supplier, date, amount

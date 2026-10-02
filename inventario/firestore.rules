@@ -35,6 +35,11 @@ service cloud.firestore {
       }
     }
 
+    // Storico datato (carichi e vendite, anche importati da foglio). Solo il titolare.
+    match /storico/{id} {
+      allow read, write: if titolare();
+    }
+
     // Foto dei prodotti (versione grande; la miniatura sta nel prodotto). Le vedono tutti, le modifica solo il titolare.
     match /foto/{id} {
       allow read: if titolare() || personale();
