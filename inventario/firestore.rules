@@ -35,6 +35,11 @@ service cloud.firestore {
       }
     }
 
+    // Per il report: il titolare può leggere tutti i prezzi di acquisto con una sola richiesta.
+    match /{path=**}/privato/{doc} {
+      allow read: if titolare();
+    }
+
     // Storico datato (carichi e vendite, anche importati da foglio). Solo il titolare.
     match /storico/{id} {
       allow read, write: if titolare();
