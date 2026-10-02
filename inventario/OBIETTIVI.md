@@ -65,7 +65,18 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 Andrea, Marco, Alessio, Luca, Heber, Fiorella, Sawkat, Made (staff, with PIN). Family (Federica, her mother, her sister): added with the PIN left blank = visible only when logged in as owner. The owner login must also pick a name for every move (no PIN).
 PINs are chosen by the owner and not stored anywhere in the repo.
 
-## 4b. Import from Federica's spreadsheet (PIER.xlsx) — ROADMAP, nothing imported yet
+## Batch 3 (built on the branch, NOT merged — Chuck says when)
+- [x] Decisions (Chuck, Oct 2): all stock -> Magazzino; staff use the sheet codes (P1, M1...) -> stored as Codice personalizzato; Pier is NOT the only workbook (a second one is coming); load the dated history; negatives -> 0 + flagged for recount.
+- [x] New product fields: Categoria (autocomplete + search filter), Scorta minima (owner sees Esaurito / Riordina tags), Da ricontare flag (+ note, visible to all), codes accept letters.
+- [x] Owner-only Impostazioni -> Importa dati: CSV for products and for dated history; preview first; re-runnable (matches by distributor + code, else name; never overwrites quantities); batches.
+- [x] `storico` collection (owner only): dated carichi/vendite. Owner sees it on the product page. Records only; quantities are not recomputed from it.
+- [x] `tools/convert_workbook.py` turns a PIER-layout workbook into prodotti.csv + storico.csv + DA-CONTROLLARE.xlsx. Generated files hold purchase prices -> never commit them.
+- Result for PIER: 413 products (3,854 pcs to storage, 15 flagged), 491 dated entries (93 carichi 1,347 pcs; 398 vendite 2,507 pcs), 44 items on Federica's checklist, 7 rows skipped (CU11/MMG25/MMG26 blank names, M85 placeholder, R7 134-in/134-out pair, D31 unknown).
+- Tests: rules 55 checks (emulator); screens 91 checks incl. importing the real files.
+- Merge needs: rules re-published in Firebase first (adds `storico`).
+- Still open: Carico / Vendita entry screens (dated, N.DOC, note); second workbook layout; reports; invoices.
+
+## 4b. Import from Federica's spreadsheet (PIER.xlsx) — ROADMAP (steps 1-4 now built, see Batch 3)
 The file is NOT stored in the repo (it contains purchase prices).
 **What the file is:** one workbook per DISTRIBUTOR ("PIER-GADGET NEL MONDO"). Tabs: `PIER` = master stock list (416 product lines: 412 coded + 4 uncoded "Campane metallo ..."; plus a placeholder M85 and a total row to skip); `CARICA` = receipts log (94 lines, 1,481 pcs, dates 23/24/29 Sep 2026); `SCARICA` = sales log (400 lines, 2,642 pcs, dates 7/21/23/24/30 Sep 2026). N.DOC and NOTE columns are empty everywhere.
 **Master columns -> our fields:** CODICE (P1, MI4, ...) -> Codice personalizzato (TBC); COD.FORN. (Art.11) -> Codice rivenditore; CATEGORIA -> NEW Categoria; DESCRIZIONE -> Nome; PR.ACQ. -> prezzo acquisto (owner-only); PR.VEND. -> prezzo vendita; SCORTA MIN. -> NEW Scorta minima; STOCK ATTUALE -> quantity (one number only: shop/storage split unknown); distributor = Pier for all. STATO/VALORE/CARICO/SCARICO/STOCK INIZIALE are computed -> not imported as fields.
