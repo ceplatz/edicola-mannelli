@@ -39,6 +39,7 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - Later: the 25 photos in the old POS can come over with the import. Invoice scans (PDF) still need Storage/Blaze.
 
 ## Ideas parked (pinned, not started)
+- **Count import ("Importa conteggio")** (Oct 2): all 122 magnet items (Calamite, Calamite Met.Gomp, Calamite Metallo) came in at 0 with no movements in the logs. Chuck: the shop has hundreds of magnets but not every design at once, so some zeros may be real; either way they were never counted. Plan: a count sheet (code, name, empty quantity) for Federica + an owner-only import that SETS quantities (shop and/or storage) and writes a dated "conteggio" entry. The same tool would settle the 15 "Da ricontare" items and the shop/storage split. Ask Federica whether the magnet counts live in another sheet.
 - **Category quick-tabs under the search bar** (idea from Chuck, Oct 2): one-tap tabs for the big families (Portachiavi / keychains, Magliette / t-shirts, Calamite / magnets, Tazze, Piatti...) so staff and Federica can narrow to an item type fast. Builds on the Categoria field and filter that already exist (a dropdown today). Decide later: which families get a tab (probably the biggest by item count: Calamite 85, Gongoli 42, Cappelli 24...), tabs vs. scrollable chips on a phone, whether a tab can combine with the distributor filter.
 - Finer sub-categories inside a family (e.g. Calamite -> resina / metallo / gomma) once we see the imported data on screen.
 
