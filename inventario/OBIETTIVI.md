@@ -38,6 +38,10 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - Merge needs: rules re-published in Firebase first.
 - Later: the 25 photos in the old POS can come over with the import. Invoice scans (PDF) still need Storage/Blaze.
 
+## Ideas parked (pinned, not started)
+- **Category quick-tabs under the search bar** (idea from Chuck, Oct 2): one-tap tabs for the big families (Portachiavi / keychains, Magliette / t-shirts, Calamite / magnets, Tazze, Piatti...) so staff and Federica can narrow to an item type fast. Builds on the Categoria field and filter that already exist (a dropdown today). Decide later: which families get a tab (probably the biggest by item count: Calamite 85, Gongoli 42, Cappelli 24...), tabs vs. scrollable chips on a phone, whether a tab can combine with the distributor filter.
+- Finer sub-categories inside a family (e.g. Calamite -> resina / metallo / gomma) once we see the imported data on screen.
+
 ## 1. Look and feel
 - [x] Start-up: Viridian black splash (copied from Verdi) → Edicola Mannelli splash → login
 - [x] Viridian splash as a single on/off setting (`mostraSplashViridian` in config.js)
