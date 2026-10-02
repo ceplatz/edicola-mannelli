@@ -31,6 +31,13 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - [x] Rules: `distributori` collection (everyone reads, owner writes). 40 emulator checks pass.
 - Merge needs: rules re-published in Firebase first.
 
+## Batch 2 (built on the branch, NOT merged — Chuck says when)
+- [x] Product photos, no paid plan needed: shrunk on the device (small ~3 KB version stored in the product for lists, ~45 KB full version in `foto/{id}`). Owner adds via live in-app camera (like the barcode scanner) or from the gallery; staff see it in search results, product page and Sposta (list + selected card).
+- [x] Rules: `foto` collection (everyone reads, owner writes). 48 emulator checks pass; screens 67 checks pass; live-camera flow tested with a fake camera device.
+- [x] Impostazioni tile text now "Personale, PIN e distributori".
+- Merge needs: rules re-published in Firebase first.
+- Later: the 25 photos in the old POS can come over with the import. Invoice scans (PDF) still need Storage/Blaze.
+
 ## 1. Look and feel
 - [x] Start-up: Viridian black splash (copied from Verdi) → Edicola Mannelli splash → login
 - [x] Viridian splash as a single on/off setting (`mostraSplashViridian` in config.js)

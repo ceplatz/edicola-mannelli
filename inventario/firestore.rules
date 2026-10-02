@@ -35,6 +35,12 @@ service cloud.firestore {
       }
     }
 
+    // Foto dei prodotti (versione grande; la miniatura sta nel prodotto). Le vedono tutti, le modifica solo il titolare.
+    match /foto/{id} {
+      allow read: if titolare() || personale();
+      allow write: if titolare();
+    }
+
     // Distributori: elenco per il menu a tendina dei prodotti. Lo vedono tutti, lo modifica solo il titolare.
     match /distributori/{id} {
       allow read: if titolare() || personale();
