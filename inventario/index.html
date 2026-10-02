@@ -226,6 +226,42 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
 .impbox ul{margin:4px 0 4px 18px}
 .impbox .bad{color:var(--danger)}
 .histrow{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:3px 0;border-bottom:1px dashed var(--line)}
+.sheet.rep{max-width:980px;width:calc(100% - 20px)}
+.rep-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.draft{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);border:1px solid var(--line);border-radius:999px;padding:2px 10px}
+.rep-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 14px}
+.rep-bar select{width:auto;padding:10px 12px}
+.rep-bar .btn{padding:10px 14px;font-size:14px}
+.rep h4{font-family:'Cormorant Garamond',serif;font-size:22px;margin:22px 0 8px}
+.rep .asof{font-size:13px;color:var(--espresso-2);margin-bottom:6px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:8px 0}
+.kpi{background:var(--sand-2);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px}
+.kpi .l{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--espresso-2)}
+.kpi .v{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:28px;line-height:1.1;margin-top:2px}
+.kpi .s{font-size:12px;color:var(--espresso-2);margin-top:2px}
+.repwarn{background:#fff4e0;border:1px solid #f0cf94;color:#8a5a00;border-radius:10px;padding:8px 12px;margin:6px 0;font-size:13px}
+table.rt{width:100%;border-collapse:collapse;font-size:14px}
+table.rt th{text-align:left;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--espresso-2);padding:6px 8px;border-bottom:1.5px solid var(--line)}
+table.rt td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+table.rt .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rep .none{color:var(--espresso-2);font-size:14px;padding:6px 0}
+.bars .bar{display:grid;grid-template-columns:150px 1fr 90px;gap:10px;align-items:center;font-size:13px;margin:4px 0}
+.bars .track{height:14px;background:var(--sand-2);border-radius:7px;overflow:hidden}
+.bars .fill{height:100%;background:var(--espresso);border-radius:7px}
+.bars .val{text-align:right;font-variant-numeric:tabular-nums}
+#repInv{display:none}
+@media (max-width:640px){.bars .bar{grid-template-columns:90px 1fr 70px}}
+@media print{
+  body.printing-rep > *, body.printing-inv > *{display:none !important}
+  body.printing-rep > #repOv, body.printing-inv > #repOv{display:block !important;position:static;background:none}
+  body.printing-rep .sheet.rep, body.printing-inv .sheet.rep{max-width:none;width:auto;max-height:none;overflow:visible;box-shadow:none;border-radius:0;background:#fff;padding:0;animation:none}
+  .noprint{display:none !important}
+  body.printing-inv #repBody{display:none}
+  body.printing-inv #repInv{display:block}
+  .kpi,.repwarn,table.rt tr{break-inside:avoid}
+  body{background:#fff}
+  .rep h4{break-after:avoid}
+}
 </style>
 </head>
 <body>
@@ -431,6 +467,20 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
   <div class="acts" style="margin-top:6px"><button type="button" class="btn" id="setClose">Chiudi</button></div>
 </div></div>
 
+<!-- Report (titolare) -->
+<div class="ov" id="repOv"><div class="sheet rep">
+  <div class="rep-head noprint"><h3>Report</h3><span class="draft">Bozza · anteprima</span></div>
+  <div class="rep-bar noprint">
+    <select id="repPeriod" aria-label="Periodo"><option value="0">Tutto lo storico</option><option value="30">Ultimi 30 giorni</option><option value="7">Ultimi 7 giorni</option></select>
+    <button class="btn" id="repPrint">🖨 Stampa report</button>
+    <button class="btn" id="repInvPrint">🖨 Inventario completo</button>
+    <button class="btn" id="repCsv">⬇ Esporta CSV</button>
+    <button class="btn p" id="repClose">Chiudi</button>
+  </div>
+  <div id="repBody"><div class="none">Caricamento…</div></div>
+  <div id="repInv"></div>
+</div></div>
+
 <!-- Fotocamera per la foto del prodotto -->
 <div id="camOv">
   <div class="bar"><span>Inquadra l'articolo</span><button class="btn" id="camClose">Chiudi</button></div>
@@ -540,7 +590,7 @@ function buildTiles(){
   t.push({e:'🔁',n:'Sposta',d:'Tra magazzino e negozio',act:function(){ openMove(null); }});
   if(role==='titolare'){
     t.push({e:'📋',n:'Registro movimenti',d:'Chi ha spostato cosa e quando',act:openLog});
-    t.push({e:'📊',n:'Report',d:'Valore, margini, più venduti',soon:true,own:true});
+    t.push({e:'📊',n:'Report',d:'Valore, margini, più venduti',act:openReport});
     t.push({e:'🧾',n:'Fatture',d:'Fatture e ricevute scansionate',soon:true,own:true});
     t.push({e:'⚙️',n:'Impostazioni',d:'Personale, PIN e distributori',act:openSettings});
   }
@@ -1194,6 +1244,124 @@ $('#impGo').onclick=function(){
     commitChunks(ops2,400,prog).then(function(){ done('Importati <b>'+total2+'</b> movimenti datati.'); }).catch(fail);
   }
 };
+
+/* ── Report (titolare) ── */
+var repData=null;
+function pad2(n){ return (n<10?'0':'')+n; }
+function isoDay(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function itDate(iso){ return String(iso||'').split('-').reverse().join('/'); }
+function fmtN(n){ return new Intl.NumberFormat('it-IT').format(n); }
+function loadCosts(){
+  var map={};
+  function fromDocs(docs){ docs.forEach(function(d){ var c=d.data().prezzoAcquisto; if(typeof c==='number' && c>0) map[d.ref.parent.parent.id]=c; }); return map; }   // 0 = prezzo mancante
+  return fdb.collectionGroup('privato').get().then(function(snap){ return fromDocs(snap.docs); }).catch(function(){
+    // regole non ancora aggiornate: si leggono i costi uno per uno (più lento, ma funziona)
+    return Promise.all(products.map(function(p){ return fdb.doc('prodotti/'+p.id+'/privato/costo').get().then(function(d){ if(d.exists && typeof d.data().prezzoAcquisto==='number' && d.data().prezzoAcquisto>0) map[p.id]=d.data().prezzoAcquisto; }).catch(function(){}); })).then(function(){ return map; });
+  });
+}
+function openReport(){
+  $('#repOv').classList.add('show'); $('#repBody').innerHTML='<div class="none">Caricamento dei dati…</div>';
+  Promise.all([loadCosts(),fdb.collection('storico').get()]).then(function(r){
+    repData={costs:r[0],storico:r[1].docs.map(function(d){ return d.data(); }),at:new Date()};
+    renderReport();
+  }).catch(function(er){ console.warn('report:',er&&er.code); $('#repBody').innerHTML='<div class="none">Impossibile caricare i dati del report. Controlla la connessione e le regole del database.</div>'; });
+}
+$('#repClose').onclick=function(){ $('#repOv').classList.remove('show'); };
+$('#repPeriod').addEventListener('change',function(){ if(repData) renderReport(); });
+function tbl(heads,rows,numCols){
+  if(!rows.length) return '<div class="none">Nessun articolo.</div>';
+  return '<table class="rt"><thead><tr>'+heads.map(function(h,i){ return '<th'+(numCols.indexOf(i)>=0?' class="n"':'')+'>'+esc(h)+'</th>'; }).join('')+'</tr></thead><tbody>'
+    +rows.map(function(r){ return '<tr>'+r.map(function(c,i){ return '<td'+(numCols.indexOf(i)>=0?' class="n"':'')+'>'+c+'</td>'; }).join('')+'</tr>'; }).join('')+'</tbody></table>';
+}
+function computeReport(days){
+  var costs=repData.costs, cutoff=null;
+  if(days>0){ var d=new Date(); d.setDate(d.getDate()-days); cutoff=isoDay(d); }
+  var sold={}, dates=[];
+  repData.storico.forEach(function(h){
+    if(h.tipo!=='vendita') return;
+    if(cutoff && String(h.data)<cutoff) return;
+    sold[h.prodottoId]=(sold[h.prodottoId]||0)+(h.qta|0); dates.push(String(h.data));
+  });
+  dates.sort();
+  var R={items:[],kpi:{val:0,rev:0,pcs:0,mag:0,neg:0,magVal:0,negVal:0,stock:0,zero:0,noPrice:0,noCost:0,recount:0},cats:{},dists:{},cutoff:cutoff,from:dates[0],to:dates[dates.length-1]};
+  products.forEach(function(p){
+    var neg=p.qtaNegozio|0, mag=p.qtaMagazzino|0, tot=neg+mag, price=p.prezzoVendita||0, cost=(p.id in costs)?costs[p.id]:null;
+    var it={p:p,tot:tot,neg:neg,mag:mag,price:price,cost:cost,val:cost!==null?cost*tot:0,rev:price*tot,sold:sold[p.id]||0};
+    R.items.push(it);
+    var k=R.kpi; k.val+=it.val; k.rev+=it.rev; k.pcs+=tot; k.mag+=mag; k.neg+=neg; k.magVal+=cost!==null?cost*mag:0; k.negVal+=cost!==null?cost*neg:0;
+    if(tot>0) k.stock++; else k.zero++;
+    if(!price) k.noPrice++; if(cost===null) k.noCost++; if(p.daRicontare) k.recount++;
+    var c=p.categoria||'Senza categoria'; var C=R.cats[c]||(R.cats[c]={n:0,pcs:0,val:0,rev:0}); C.n++; C.pcs+=tot; C.val+=it.val; C.rev+=it.rev;
+    var dn=distName(p)||'Senza distributore'; var D=R.dists[dn]||(R.dists[dn]={n:0,pcs:0,val:0,rev:0}); D.n++; D.pcs+=tot; D.val+=it.val; D.rev+=it.rev;
+  });
+  return R;
+}
+function nameCell(it){ return esc(it.p.nome)+'<br><span style="color:var(--espresso-2);font-size:12px">'+esc(it.p.codiceCustom||it.p.codiceProdotto||'—')+(it.p.categoria?' · '+esc(it.p.categoria):'')+'</span>'; }
+function renderReport(){
+  var days=parseInt($('#repPeriod').value,10)||0, R=computeReport(days), k=R.kpi;
+  var margin=k.rev-k.val, pct=k.rev>0?Math.round(margin/k.rev*100):0;
+  var periodTxt = days>0 ? 'ultimi '+days+' giorni' : (R.from?'dal '+itDate(R.from)+' al '+itDate(R.to):'storico completo');
+  var h='<div class="asof">Edicola Mannelli · Duomo — report del '+esc(repData.at.toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'}))+' · vendite: '+esc(periodTxt)+'</div>';
+  h+='<div class="kpis">'
+    +'<div class="kpi"><div class="l">Valore a costo</div><div class="v">'+eur.format(k.val)+'</div><div class="s">magazzino '+eur.format(k.magVal)+' · negozio '+eur.format(k.negVal)+'</div></div>'
+    +'<div class="kpi"><div class="l">Ricavo potenziale</div><div class="v">'+eur.format(k.rev)+'</div><div class="s">se vendi tutto al prezzo attuale</div></div>'
+    +'<div class="kpi"><div class="l">Margine potenziale</div><div class="v">'+eur.format(margin)+'</div><div class="s">'+pct+'% del ricavo</div></div>'
+    +'<div class="kpi"><div class="l">Pezzi</div><div class="v">'+fmtN(k.pcs)+'</div><div class="s">magazzino '+fmtN(k.mag)+' · negozio '+fmtN(k.neg)+'</div></div>'
+    +'<div class="kpi"><div class="l">Articoli</div><div class="v">'+fmtN(R.items.length)+'</div><div class="s">'+fmtN(k.stock)+' con scorta · '+fmtN(k.zero)+' a zero</div></div></div>';
+  var warns=[];
+  if(k.noPrice) warns.push(k.noPrice+' articoli senza prezzo di vendita: il ricavo è sottostimato.');
+  if(k.noCost) warns.push(k.noCost+' articoli senza prezzo di acquisto: il valore a costo è sottostimato.');
+  if(k.recount) warns.push(k.recount+' articoli «da ricontare»: le quantità non sono affidabili.');
+  if(k.zero>0) warns.push(k.zero+' articoli a zero: se non sono mai stati contati, valore e margine sono più bassi del reale.');
+  h+=warns.map(function(w){ return '<div class="repwarn">⚠ '+esc(w)+'</div>'; }).join('');
+  // valore per categoria (barre)
+  var cats=Object.keys(R.cats).map(function(c){ return [c,R.cats[c]]; }).sort(function(a,b){ return b[1].val-a[1].val; });
+  var maxv=cats.length?Math.max(cats[0][1].val,1):1;
+  h+='<h4>Valore a costo per categoria</h4><div class="bars">'+cats.slice(0,10).map(function(c){ return '<div class="bar"><span>'+esc(c[0])+'</span><span class="track"><span class="fill" style="display:block;width:'+Math.round(c[1].val/maxv*100)+'%"></span></span><span class="val">'+eur.format(c[1].val)+'</span></div>'; }).join('')+'</div>';
+  // più venduti
+  var top=R.items.filter(function(i){ return i.sold>0; }).sort(function(a,b){ return b.sold-a.sold; }).slice(0,10);
+  h+='<h4>Più venduti</h4>'+tbl(['Articolo','Venduti','Incasso','Margine'],top.map(function(i){ return [nameCell(i),fmtN(i.sold),eur.format(i.sold*i.price),i.cost!==null?eur.format(i.sold*(i.price-i.cost)):'—']; }),[1,2,3]);
+  // esauriti che vendevano
+  var out=R.items.filter(function(i){ return i.tot<=0 && i.sold>0; }).sort(function(a,b){ return b.sold-a.sold; }).slice(0,10);
+  h+='<h4>Esauriti che vendevano</h4>'+tbl(['Articolo','Venduti nel periodo','Scorta min.'],out.map(function(i){ return [nameCell(i),fmtN(i.sold),i.p.scortaMin?fmtN(i.p.scortaMin):'—']; }),[1,2]);
+  // sotto scorta minima
+  var low=R.items.filter(function(i){ return i.tot>0 && i.p.scortaMin && i.tot<=i.p.scortaMin; }).sort(function(a,b){ return (a.tot/a.p.scortaMin)-(b.tot/b.p.scortaMin); }).slice(0,10);
+  h+='<h4>Sotto scorta minima</h4>'+tbl(['Articolo','Scorta','Minima'],low.map(function(i){ return [nameCell(i),fmtN(i.tot),fmtN(i.p.scortaMin)]; }),[1,2]);
+  // fermi
+  var slow=R.items.filter(function(i){ return i.tot>0 && i.sold===0 && i.val>0; }).sort(function(a,b){ return b.val-a.val; }).slice(0,10);
+  var slowAll=R.items.filter(function(i){ return i.tot>0 && i.sold===0; });
+  h+='<h4>Fermi: scorta senza vendite nel periodo</h4><div class="asof">'+slowAll.length+' articoli, '+eur.format(slowAll.reduce(function(a,i){ return a+i.val; },0))+' di merce a costo. I 10 più costosi:</div>'
+    +tbl(['Articolo','Pezzi','Valore a costo'],slow.map(function(i){ return [nameCell(i),fmtN(i.tot),eur.format(i.val)]; }),[1,2]);
+  // per categoria / distributore
+  function grp(o,label){ var rows=Object.keys(o).map(function(n){ return [n,o[n]]; }).sort(function(a,b){ return b[1].val-a[1].val; });
+    return tbl([label,'Articoli','Pezzi','Valore a costo','Ricavo potenziale'],rows.map(function(r){ return [esc(r[0]),fmtN(r[1].n),fmtN(r[1].pcs),eur.format(r[1].val),eur.format(r[1].rev)]; }),[1,2,3,4]); }
+  h+='<h4>Per categoria</h4>'+grp(R.cats,'Categoria');
+  if(Object.keys(R.dists).length>1) h+='<h4>Per distributore</h4>'+grp(R.dists,'Distributore');
+  h+='<div class="none" style="margin-top:16px">Anteprima: i numeri dipendono dai dati inseriti finora. L\'incasso delle vendite è calcolato al prezzo di vendita attuale.</div>';
+  $('#repBody').innerHTML=h;
+}
+$('#repPrint').onclick=function(){ document.body.classList.add('printing-rep'); setTimeout(function(){ window.print(); },50); };
+$('#repInvPrint').onclick=function(){
+  if(!repData) return;
+  var rows=products.slice().sort(function(a,b){ return String(a.categoria||'~').localeCompare(String(b.categoria||'~'),'it') || String(a.nome).localeCompare(String(b.nome),'it'); });
+  $('#repInv').innerHTML='<div class="asof">Edicola Mannelli · Duomo — inventario completo del '+esc(new Date().toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'}))+' · '+rows.length+' articoli</div>'
+    +tbl(['Codice','Articolo','Categoria','Negozio','Magazzino','Prezzo'],rows.map(function(p){ return [esc(p.codiceCustom||p.codiceProdotto||'—'),esc(p.nome)+(p.daRicontare?' ⚠':''),esc(p.categoria||''),fmtN(p.qtaNegozio|0),fmtN(p.qtaMagazzino|0),eur.format(p.prezzoVendita||0)]; }),[3,4,5]);
+  document.body.classList.add('printing-inv'); setTimeout(function(){ window.print(); },50);
+};
+window.addEventListener('afterprint',function(){ document.body.classList.remove('printing-rep','printing-inv'); });
+$('#repCsv').onclick=function(){
+  if(!repData) return;
+  var cols=['codice','nome','categoria','distributore','negozio','magazzino','totale','scorta_min','prezzo_acquisto','prezzo_vendita','valore_a_costo'];
+  function cell(v){ v=v==null?'':String(v); if(/^[=+\-@]/.test(v)) v="'"+v; return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+  function dec(n){ return n==null?'':(Math.round(n*100)/100).toFixed(2).replace('.',','); }
+  var lines=[cols.join(';')].concat(products.slice().sort(function(a,b){ return String(a.nome).localeCompare(String(b.nome),'it'); }).map(function(p){
+    var tot=(p.qtaNegozio|0)+(p.qtaMagazzino|0), c=(p.id in repData.costs)?repData.costs[p.id]:null;
+    return [p.codiceCustom||p.codiceProdotto||'',p.nome,p.categoria||'',distName(p),p.qtaNegozio|0,p.qtaMagazzino|0,tot,p.scortaMin||'',dec(c),dec(p.prezzoVendita||0),c!==null?dec(Math.round(c*tot*100)/100):''].map(cell).join(';');
+  }));
+  var blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}), url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download='inventario-'+isoDay(new Date())+'.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); },1000);
+};
+$('#repOv').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('show'); });
 
 /* ── Orologio ── */
 function tick(){ var d=new Date(); $('#clockT').textContent=d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}); $('#clockD').textContent=d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}); }

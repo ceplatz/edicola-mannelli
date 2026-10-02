@@ -38,6 +38,13 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - Merge needs: rules re-published in Firebase first.
 - Later: the 25 photos in the old POS can come over with the import. Invoice scans (PDF) still need Storage/Blaze.
 
+## Batch 4 (built on the branch, NOT merged — Chuck says when)
+- [x] Report v0 (owner-only, marked BOZZA): value at cost, potential revenue and margin, pieces (storage vs shop), item counts + data-quality warnings; value by category (bars); top sellers for a period (all / 30 d / 7 d) with takings and margin; sold-out items that were selling; below minimum stock; slow stock with the cash tied up; totals per category and per distributor. Buttons: print report, print full inventory (A4 print mode), export CSV (Excel-friendly: BOM, `;`, decimal comma).
+- [x] Numbers checked against an independent calculation of the PIER data (value EUR 9,169.30; revenue EUR 27,656.50; margin 67%; top seller Adesivi 75 pcs).
+- [x] Rules: collection-group read of `privato` for the owner (one query for all purchase prices). If not yet published the report falls back to per-product reads, so it still works. Tests: rules 59, screens 113.
+- Note: a purchase price of 0 counts as "missing" in the report. Sales takings use the CURRENT sale price (no price history yet).
+- Next for reports: stock-count import (magazzino/negozio), Carico/Vendita entry screens so the numbers stay live, reasons for stock decreases.
+
 ## Ideas parked (pinned, not started)
 - **Count import ("Importa conteggio")** (Oct 2): all 122 magnet items (Calamite, Calamite Met.Gomp, Calamite Metallo) came in at 0 with no movements in the logs. Chuck: the shop has hundreds of magnets but not every design at once, so some zeros may be real; either way they were never counted. Plan: a count sheet (code, name, empty quantity) for Federica + an owner-only import that SETS quantities (shop and/or storage) and writes a dated "conteggio" entry. The same tool would settle the 15 "Da ricontare" items and the shop/storage split. Ask Federica whether the magnet counts live in another sheet.
 - **Category quick-tabs under the search bar** (idea from Chuck, Oct 2): one-tap tabs for the big families (Portachiavi / keychains, Magliette / t-shirts, Calamite / magnets, Tazze, Piatti...) so staff and Federica can narrow to an item type fast. Builds on the Categoria field and filter that already exist (a dropdown today). Decide later: which families get a tab (probably the biggest by item count: Calamite 85, Gongoli 42, Cappelli 24...), tabs vs. scrollable chips on a phone, whether a tab can combine with the distributor filter.
