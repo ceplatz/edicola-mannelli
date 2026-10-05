@@ -64,8 +64,9 @@ service cloud.firestore {
       allow write: if titolare();
     }
 
-    // Registro movimenti: lo legge SOLO il titolare. Si può solo aggiungere
-    // (anche dal personale quando sposta merce). Mai modificare né cancellare.
+    // Registro movimenti: lo legge SOLO il titolare. Si può aggiungere (anche dal
+    // personale quando sposta merce). Mai modificare. Solo il titolare può eliminare
+    // una riga (es. spostamento fatto per errore).
     match /movimenti/{id} {
       allow read: if titolare();
       allow create: if (titolare() || personale())
@@ -80,7 +81,8 @@ service cloud.firestore {
         && request.resource.data.ruolo == (titolare() ? 'titolare' : 'personale')
         && (titolare()
             || exists(/databases/$(database)/documents/personale/$(request.resource.data.staffId)));
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if titolare();
     }
   }
 }
