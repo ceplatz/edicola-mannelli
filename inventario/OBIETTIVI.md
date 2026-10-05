@@ -51,6 +51,11 @@ Living list of objectives. Updated as Federica's requests arrive. Nothing below 
 - [x] Verified vs an independent calculation: Mese Sept = 2,507 pcs / EUR 18,343.30 / margin EUR 12,226.75 / 1,347 received; Settimana 40 = 734 pcs, -21% vs week 39 (932 pcs). Tests: screens 138 across 7 suites; no new rules.
 - Later: custom date range; compare against the same period last year once there is a year of data.
 
+## Batch 6 (built on the branch, NOT merged — Chuck says when)
+- [x] Delete a movement from the owner's Registro movimenti (Chuck, Oct 5: critical, for accidental moves). Small-print "elimina" on each line -> confirmation window with two choices: (a) delete AND undo the move (puts the pieces back where they came from; checked inside a transaction, and disabled with the reason if those pieces are no longer there), (b) delete only the log line (quantities stay). Cancel changes nothing. Owner only; staff cannot even see the log.
+- [x] Rules: `movimenti` -> `allow delete: if titolare()` (update stays denied; creating by staff unchanged). Rules tests 65, screens 15 new + all earlier suites green. MUST re-publish firestore.rules in Firebase: until then the screen shows "pubblica le regole aggiornate" and nothing is deleted.
+- Trade-off noted: a deleted line is gone for good (no trash). A "deleted entries" audit trail can be added if wanted.
+
 ## Ideas parked (pinned, not started)
 - **Low-stock alerts that don't drown in zeros** (Chuck, Oct 2). Today: "Riordina" tag only when stock > 0 and <= scorta minima (39 items), report lists "Esauriti che vendevano" (only items that actually sold) -> no 400 alerts by design. Proposed next: (1) alert only on items that SOLD in the last ~60 days (auto-relevance); (2) per-item "Non avvisare" with snooze (30 days / forever: seasonal, discontinued); (3) one grouped digest "Da riordinare" per distributor, not per-item badges; (4) optional default minimum per category (e.g. magnets: 3 of each design that sells) instead of item by item; (5) later, "days of cover" from sales velocity. Staff never see alerts.
 - **Reorder list per distributor** — printable / shareable shopping list ("Lista d'ordine Pier") with a suggested quantity (to reach 2x minimum, or last 30 days' sales). Matches her paperwork-by-distributor, and she buys in person (Chinatown) so a list on the phone/paper is what she needs.
