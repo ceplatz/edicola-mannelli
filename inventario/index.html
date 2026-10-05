@@ -1006,8 +1006,9 @@ $('#staffAdd').addEventListener('submit',function(e){
 var mv=null, pinTry=0, pinLock=0;
 function srcQty(){ return mv&&mv.prod ? ((mv.dir==='mn'?mv.prod.qtaMagazzino:mv.prod.qtaNegozio)|0) : 0; }
 function pills(p){ return '<div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">Negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">Magazzino<b>'+(p.qtaMagazzino|0)+'</b></div>'; }
+function bestDir(p){ return ((p.qtaMagazzino|0)>0 || !((p.qtaNegozio|0)>0)) ? 'mn' : 'nm'; }   // parte dal lato che ha pezzi
 function openMove(p){
-  mv={prod:p||null,dir:'mn',qty:1,who:null};
+  mv={prod:p||null,dir:p?bestDir(p):'mn',qty:1,who:null};
   $('#mvQ').value=''; $('#mvRes').innerHTML=''; $('#mvErr').textContent='';
   renderMove(); $('#moveOv').classList.add('show'); if(!p) setTimeout(function(){ $('#mvQ').focus(); },50);
 }
@@ -1018,10 +1019,18 @@ function renderMove(){
     p=byId[p.id]||p; mv.prod=p;
     $('#mvSel .nm').textContent=p.nome; $('#mvSelQ').innerHTML=pills(p);
     var mi=$('#mvSelImg'); if(p.miniatura){ mi.src=p.miniatura; mi.classList.remove('hidden'); } else { mi.classList.add('hidden'); mi.removeAttribute('src'); }
-    Array.prototype.forEach.call(document.querySelectorAll('#mvDir button'),function(b){ b.classList.toggle('on',b.dataset.d===mv.dir); });
+    var mag=p.qtaMagazzino|0, neg=p.qtaNegozio|0;
+    Array.prototype.forEach.call(document.querySelectorAll('#mvDir button'),function(b){
+      var isMn=b.dataset.d==='mn', have=isMn?mag:neg;
+      b.classList.toggle('on',b.dataset.d===mv.dir); b.style.opacity=have?'1':'.55';
+      b.innerHTML=(isMn?'Magazzino → Negozio':'Negozio → Magazzino')+'<br><small style="font-weight:500">'+(have?have+(have===1?' pezzo disponibile':' pezzi disponibili'):'nessun pezzo da spostare')+'</small>';
+    });
     var max=srcQty(); if(mv.qty>max) mv.qty=max; if(mv.qty<1 && max>0) mv.qty=1;
     $('#mvQty').value=mv.qty;
-    $('#mvMax').textContent = max ? 'disponibili: '+max : 'Nessun pezzo disponibile da qui';
+    var srcName=mv.dir==='mn'?'Magazzino':'Negozio', otherName=mv.dir==='mn'?'Negozio':'Magazzino', otherHave=mv.dir==='mn'?neg:mag;
+    $('#mvMax').textContent = max ? 'disponibili in '+srcName+': '+max
+      : (mag+neg===0 ? 'Questo articolo non ha pezzi: non c\'è nulla da spostare.'
+         : 'In '+srcName+' non ci sono pezzi da spostare ('+otherHave+' in '+otherName+').');
     var who=whoChoices();
     $('#mvWho').innerHTML = who.length ? who.map(function(s){ return '<button type="button" class="chip'+(mv.who&&mv.who.id===s.id?' sel':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('')
       : '<div class="hint">Nessun dipendente configurato. Il titolare deve aggiungerli in Impostazioni.</div>';
@@ -1033,7 +1042,7 @@ function whoChoices(){
   if(role==='personale') return staff.filter(function(s){ return s.pinHash; });
   return staff.length ? staff : [{id:'titolare',nome:'Titolare'}];
 }
-function pickMoveProduct(p){ mv.prod=p; mv.qty=1; $('#mvErr').textContent=''; renderMove(); }
+function pickMoveProduct(p){ mv.prod=p; mv.dir=bestDir(p); mv.qty=1; $('#mvErr').textContent=''; renderMove(); }
 $('#mvQ').addEventListener('input',function(){
   var q=norm(this.value);
   if(!q){ $('#mvRes').innerHTML=''; return; }
@@ -1063,19 +1072,33 @@ $('#mvGo').onclick=function(){
   if(role==='titolare') doMove(); else askPin(mv.who,doMove);
 };
 function doMove(){
-  var p=mv.prod, n=mv.qty, from=mv.dir==='mn'?'magazzino':'negozio', to=mv.dir==='mn'?'negozio':'magazzino';
-  var F=firebase.firestore.FieldValue, upd={aggiornatoIl:F.serverTimestamp()};
-  upd['qta'+from.charAt(0).toUpperCase()+from.slice(1)]=F.increment(-n);
-  upd['qta'+to.charAt(0).toUpperCase()+to.slice(1)]=F.increment(n);
-  var b=fdb.batch();
-  b.update(fdb.doc('prodotti/'+p.id),upd);
-  b.set(fdb.collection('movimenti').doc(),{prodottoId:p.id,prodottoNome:p.nome,codice:p.codiceProdotto||'',da:from,a:to,qta:n,staffId:mv.who.id,staffNome:mv.who.nome,ruolo:role,quando:F.serverTimestamp()});
-  var go=$('#mvGo'); go.disabled=true; var finished=false, msg=n+' × '+p.nome+': '+from+' → '+to+'.';
-  function ok(offline){ if(finished) return; finished=true; $('#moveOv').classList.remove('show'); mv=null; toast(offline?'Nessuna connessione: lo spostamento verrà registrato appena torna la rete.':'Spostato — '+msg); }
-  var t=setTimeout(function(){ ok(true); },8000);
-  b.commit().then(function(){ clearTimeout(t); ok(false); }).catch(function(er){
-    clearTimeout(t); if(finished) return; finished=true; go.disabled=false; console.warn('sposta:',er.code);
-    $('#mvErr').textContent = er.code==='permission-denied' ? 'Spostamento rifiutato: la quantità è cambiata nel frattempo o le regole del database non sono aggiornate. Riprova.' : 'Spostamento non riuscito. Controlla la connessione.';
+  var p=mv.prod, n=mv.qty|0, from=mv.dir==='mn'?'magazzino':'negozio', to=mv.dir==='mn'?'negozio':'magazzino';
+  var fFrom='qta'+from.charAt(0).toUpperCase()+from.slice(1), fTo='qta'+to.charAt(0).toUpperCase()+to.slice(1);
+  var F=firebase.firestore.FieldValue, pref=fdb.doc('prodotti/'+p.id), mref=fdb.collection('movimenti').doc();
+  var go=$('#mvGo'); go.disabled=true; $('#mvErr').textContent='';
+  var finished=false, msg=n+' × '+p.nome+': '+from+' → '+to+'.', waitT=setTimeout(function(){ if(!finished) $('#mvErr').textContent='In attesa della connessione… non ripetere lo spostamento.'; },8000);
+  // La quantità viene riletta e controllata nel database nel momento dello spostamento: così non si possono spostare pezzi che non ci sono,
+  // nemmeno se questo schermo era rimasto indietro (due tablet, rete lenta) e anche entrando come titolare.
+  fdb.runTransaction(function(tx){
+    return tx.get(pref).then(function(snap){
+      if(!snap.exists) throw {code:'no-product'};
+      var d=snap.data(), have=d[fFrom]|0;
+      if(n<1 || have<n) throw {code:'not-enough',have:have};
+      var upd={aggiornatoIl:F.serverTimestamp()}; upd[fFrom]=have-n; upd[fTo]=(d[fTo]|0)+n;
+      tx.update(pref,upd);
+      tx.set(mref,{prodottoId:p.id,prodottoNome:p.nome,codice:p.codiceProdotto||'',da:from,a:to,qta:n,staffId:mv.who.id,staffNome:mv.who.nome,ruolo:role,quando:F.serverTimestamp()});
+    });
+  }).then(function(){
+    clearTimeout(waitT); finished=true; $('#moveOv').classList.remove('show'); mv=null; toast('Spostato — '+msg);
+  }).catch(function(er){
+    clearTimeout(waitT); finished=true; go.disabled=false; console.warn('sposta:',er&&er.code);
+    var code=er&&er.code, label=from==='magazzino'?'Magazzino':'Negozio';
+    if(mv) mv.qty=Math.min(mv.qty|0,(code==='not-enough'?er.have:0)|0);
+    $('#mvErr').textContent = code==='not-enough' ? 'Spostamento NON eseguito: in '+label+(er.have===1?' c\'è solo 1 pezzo':' ci sono solo '+(er.have|0)+' pezzi')+' (ne servono '+n+'). Le quantità sono state aggiornate.'
+      : code==='no-product' ? 'Spostamento NON eseguito: l\'articolo non esiste più.'
+      : code==='permission-denied' ? 'Spostamento rifiutato dal database. Riprova; se continua, avvisa il titolare.'
+      : 'Spostamento NON eseguito: manca la connessione. Riprova quando torna la rete.';
+    if(mv) renderMove();
   });
 }
 
