@@ -659,8 +659,8 @@ function renderResults(){
   var list=products.filter(function(p){ return (!df || p.distributoreId===df) && (!cf || p.categoria===cf) && (!q || matches(p,q)); }).sort(function(a,b){
     return (q?rank(a,q)-rank(b,q):0) || String(a.nome).localeCompare(String(b.nome),'it');
   });
-  $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati')+(list.length>200?' — mostrati i primi 200, restringi la ricerca':'') : '';
-  $('#results').innerHTML = list.length ? list.slice(0,200).map(function(p){
+  $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati') : '';
+  $('#results').innerHTML = list.length ? list.map(function(p){
     var codes=[p.codiceProdotto&&'Cod. '+p.codiceProdotto, p.codiceRivenditore&&'Riv. '+p.codiceRivenditore, p.codiceCustom&&'Pers. '+p.codiceCustom, p.barcode&&'▮ '+p.barcode, distName(p)].filter(Boolean).join(' · ');
     return '<button class="res" data-id="'+esc(p.id)+'">'+(p.miniatura?'<img class="thumb" alt="" src="'+esc(p.miniatura)+'">':'')+'<div class="info"><div class="nm">'+esc(p.nome)+'</div><div class="codes">'+esc(codes||'Nessun codice')+'</div>'+tagsHtml(p)+'</div>'
       +'<div class="qty"><div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">Negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">Magazzino<b>'+(p.qtaMagazzino|0)+'</b></div></div>'
