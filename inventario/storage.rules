@@ -1,0 +1,21 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function titolare() {
+      return request.auth != null
+        && request.auth.token.email.lower() == 'proprietario@edicolamannelli.com';
+    }
+
+    // Fatture: foto o PDF, fino a 15 MB l'una. Le vede e le gestisce SOLO il titolare.
+    match /fatture/{fatturaId}/{file} {
+      allow read: if titolare();
+      allow create: if titolare()
+        && request.resource.size < 15 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf');
+      allow update: if false;
+      allow delete: if titolare();
+    }
+  }
+}
