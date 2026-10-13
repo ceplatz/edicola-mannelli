@@ -756,7 +756,7 @@ function renderResults(){
   }).join('') : '<div class="empty">'+(products.length ? 'Nessun risultato.' : 'Ancora nessun prodotto.'+(role==='titolare'?' Usa «Nuovo prodotto» per iniziare.':''))+'</div>';
 }
 $('#q').addEventListener('input',renderResults);
-$('#distFilter').addEventListener('change',renderResults);
+$('#distFilter').addEventListener('change',function(){ fillCatSelects(); renderResults(); });
 $('#catFilter').addEventListener('change',renderResults);
 $('#results').addEventListener('click',function(e){ var b=e.target.closest('.res'); if(b) openView(b.dataset.id); });
 
@@ -772,11 +772,13 @@ function tagsHtml(p){
 }
 function updFilterWrap(){ $('#distFilterWrap').classList.toggle('hidden',$('#distFilter').classList.contains('hidden') && $('#catFilter').classList.contains('hidden')); }
 function fillCatSelects(){
-  var cats=Object.keys(products.reduce(function(a,p){ if(p.categoria) a[p.categoria]=1; return a; },{})).sort(function(a,b){ return a.localeCompare(b,'it'); });
+  function catsOf(list){ return Object.keys(list.reduce(function(a,p){ if(p.categoria) a[p.categoria]=1; return a; },{})).sort(function(a,b){ return a.localeCompare(b,'it'); }); }
+  var all=catsOf(products), df=$('#distFilter').value;
+  var cats=df ? catsOf(products.filter(function(p){ return p.distributoreId===df; })) : all;   // con un distributore scelto: solo le sue categorie
   var f=$('#catFilter'), cur=f.value;
   f.innerHTML='<option value="">Tutte le categorie</option>'+cats.map(function(c){ return '<option value="'+esc(c)+'">'+esc(c)+'</option>'; }).join('');
-  f.value=cats.indexOf(cur)>=0?cur:''; f.classList.toggle('hidden',!cats.length);
-  $('#catList').innerHTML=cats.map(function(c){ return '<option value="'+esc(c)+'">'; }).join('');
+  f.value=cats.indexOf(cur)>=0?cur:''; f.classList.toggle('hidden',!all.length);
+  $('#catList').innerHTML=all.map(function(c){ return '<option value="'+esc(c)+'">'; }).join('');
   updFilterWrap();
 }
 var viewingId=null;
