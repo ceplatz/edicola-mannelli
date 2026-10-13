@@ -259,12 +259,40 @@ table.rt .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-num
 .dl.up{color:#2f7d4f}
 .dl.down{color:var(--danger)}
 #repInv{display:none}
+.frow{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:6px 0}
+.frow .fq{flex:1 1 200px}
+.frow select,.frow input{width:auto;min-width:130px}
+.frow .fq input{width:100%}
+.frow .btn{padding:11px 16px}
+.itwrap{overflow-x:auto}
+table.it th{cursor:pointer;white-space:nowrap;user-select:none}
+table.it th.on{color:var(--coral)}
+table.it td{font-size:13px}
+table.it .nm{font-weight:700}
+table.it .cd{font-size:11px;color:var(--espresso-2)}
+.itprint{display:none}
+.filebtn{display:inline-block;cursor:pointer;text-align:center}
+.ftfile{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.ftfile button{border:0;background:none;color:var(--danger);font-weight:700;cursor:pointer}
+.fatrow{display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;padding:10px 4px;border-bottom:1px solid var(--line);cursor:pointer;width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0}
+.fatrow:hover{background:var(--sand-2)}
+.fatrow .dt{font-weight:700;grid-row:span 2;align-self:center}
+.fatrow .sub{font-size:12px;color:var(--espresso-2)}
+.fatrow .pg{grid-row:span 2;align-self:center;font-size:13px;color:var(--espresso-2)}
+.sheet label.filebtn{text-transform:none;letter-spacing:0;font-size:inherit;color:inherit;margin:0;display:inline-block}
+#fvFiles img{max-width:100%;border:1px solid var(--line);border-radius:10px;margin:6px 0;display:block}
 @media (max-width:640px){.bars .bar{grid-template-columns:90px 1fr 70px}}
 @media print{
   body.printing-rep > *, body.printing-inv > *{display:none !important}
   body.printing-rep > #repOv, body.printing-inv > #repOv{display:block !important;position:static;background:none}
   body.printing-rep .sheet.rep, body.printing-inv .sheet.rep{max-width:none;width:auto;max-height:none;overflow:visible;box-shadow:none;border-radius:0;background:#fff;padding:0;animation:none}
   .noprint{display:none !important}
+  body.printing-items > *{display:none !important}
+  body.printing-items > #itemsOv{display:block !important;position:static;background:none}
+  body.printing-items #itemsOv .sheet.rep{max-width:none;width:auto;max-height:none;overflow:visible;box-shadow:none;border-radius:0;background:#fff;padding:0;animation:none}
+  body.printing-items .itprint{display:block}
+  body.printing-items .itwrap{overflow:visible}
+  table.it th{cursor:default}
   body.printing-inv #repBody{display:none}
   body.printing-inv #repInv{display:block}
   .kpi,.repwarn,table.rt tr{break-inside:avoid}
@@ -495,12 +523,72 @@ table.rt .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-num
     <select id="repPeriod" aria-label="Periodo"><option value="all">Tutto lo storico</option><option value="year">Anno</option><option value="quarter">Trimestre</option><option value="month">Mese</option><option value="week">Settimana</option></select>
     <span class="repnav hidden" id="repNav"><button type="button" class="btn" id="repPrev" aria-label="Periodo precedente">◀</button><span id="repLabel"></span><button type="button" class="btn" id="repNext" aria-label="Periodo successivo">▶</button></span>
     <button class="btn" id="repPrint">🖨 Stampa report</button>
+    <button class="btn" id="repItems">📋 Elenco articoli</button>
     <button class="btn" id="repInvPrint">🖨 Inventario completo</button>
     <button class="btn" id="repCsv">⬇ Esporta CSV</button>
     <button class="btn p" id="repClose">Chiudi</button>
   </div>
   <div id="repBody"><div class="none">Caricamento…</div></div>
   <div id="repInv"></div>
+</div></div>
+
+<!-- Elenco articoli (titolare) -->
+<div class="ov" id="itemsOv" style="z-index:5200"><div class="sheet rep">
+  <div class="rep-head noprint"><h3>Elenco articoli</h3></div>
+  <div class="frow noprint">
+    <div class="fq"><label>Cerca</label><input id="itQ" placeholder="Nome, codice, distributore…" autocomplete="off"></div>
+    <div><label>Distributore</label><select id="itDist"></select></div>
+    <div><label>Categoria</label><select id="itCat"></select></div>
+    <div><label>Giacenza</label><select id="itStock"><option value="">Tutti</option><option value="with">Con pezzi</option><option value="none">Esauriti (0)</option></select></div>
+  </div>
+  <div class="frow noprint">
+    <div><label>Data di</label><select id="itDateKind"><option value="creato">Inserimento</option><option value="mod">Ultima modifica</option><option value="mov">Ultimo spostamento</option></select></div>
+    <div><label>Dal</label><input type="date" id="itFrom"></div>
+    <div><label>Al</label><input type="date" id="itTo"></div>
+    <button type="button" class="btn" id="itReset">Azzera filtri</button>
+  </div>
+  <div class="rep-bar noprint" style="margin-top:12px">
+    <span id="itCount" class="hint" style="margin:0 6px 0 0"></span>
+    <button class="btn" id="itPrint">🖨 Stampa</button>
+    <button class="btn" id="itCsv">⬇ Esporta CSV</button>
+    <button class="btn p" id="itClose">Chiudi</button>
+  </div>
+  <div class="asof itprint" id="itAsof"></div>
+  <div id="itBody" class="itwrap"><div class="none">Caricamento…</div></div>
+</div></div>
+
+<!-- Fatture (titolare) -->
+<div class="ov" id="fatOv" style="z-index:5200"><div class="sheet wide">
+  <h3>Fatture</h3>
+  <div class="frow">
+    <div><label>Distributore</label><select id="fatDistF"></select></div>
+    <div><label>Dal</label><input type="date" id="fatFrom"></div>
+    <div><label>Al</label><input type="date" id="fatTo"></div>
+    <button type="button" class="btn p" id="fatNew">＋ Nuova fattura</button>
+  </div>
+  <div id="fatNewBox" class="impbox hidden">
+    <div class="row2"><div><label>Data della fattura</label><input type="date" id="ftData"></div><div><label>Distributore</label><select id="ftDist"></select></div></div>
+    <label>Nota (facoltativa)</label><input id="ftNota" maxlength="120" placeholder="Es. numero fattura, ordine…" autocomplete="off">
+    <label>Pagine</label>
+    <div class="acts" style="justify-content:flex-start;margin-top:4px">
+      <label class="btn filebtn">📷 Scatta foto<input type="file" id="ftCam" accept="image/*" capture="environment" hidden></label>
+      <label class="btn filebtn">📎 Scegli foto o PDF<input type="file" id="ftPick" accept="image/*,application/pdf" multiple hidden></label>
+    </div>
+    <div id="ftFiles" style="margin-top:8px"></div>
+    <div class="ferr" id="ftErr"></div>
+    <div class="acts"><button type="button" class="btn" id="ftCancel">Annulla</button><button type="button" class="btn p" id="ftSave" disabled>Salva fattura</button></div>
+  </div>
+  <div id="fatList" style="margin-top:10px"><div class="empty">Caricamento…</div></div>
+  <div class="acts"><button type="button" class="btn p" id="fatClose">Chiudi</button></div>
+</div></div>
+
+<!-- Dettaglio fattura -->
+<div class="ov" id="fatViewOv" style="z-index:5300"><div class="sheet wide">
+  <h3 id="fvTitle">Fattura</h3>
+  <div id="fvInfo" style="font-size:15px;line-height:1.5"></div>
+  <div id="fvFiles" style="margin-top:12px"></div>
+  <div class="ferr" id="fvErr"></div>
+  <div class="acts"><button type="button" class="btn" id="fvDel" style="color:var(--danger)">Elimina fattura</button><button type="button" class="btn p" id="fvClose">Chiudi</button></div>
 </div></div>
 
 <!-- Fotocamera per la foto del prodotto -->
@@ -613,7 +701,7 @@ function buildTiles(){
   if(role==='titolare'){
     t.push({e:'📋',n:'Registro movimenti',d:'Chi ha spostato cosa e quando',act:openLog});
     t.push({e:'📊',n:'Report',d:'Valore, margini, più venduti',act:openReport});
-    t.push({e:'🧾',n:'Fatture',d:'Fatture e ricevute scansionate',soon:true,own:true});
+    t.push({e:'🧾',n:'Fatture',d:'Fatture e ricevute scansionate',act:openFatture});
     t.push({e:'⚙️',n:'Impostazioni',d:'Personale, PIN e distributori',act:openSettings});
   }
   var box=$('#tiles'); box.innerHTML='';
@@ -1498,7 +1586,7 @@ $('#repInvPrint').onclick=function(){
     +tbl(['Codice','Articolo','Categoria','Negozio','Magazzino','Prezzo'],rows.map(function(p){ return [esc(p.codiceCustom||p.codiceProdotto||'—'),esc(p.nome)+(p.daRicontare?' ⚠':''),esc(p.categoria||''),fmtN(p.qtaNegozio|0),fmtN(p.qtaMagazzino|0),eur.format(p.prezzoVendita||0)]; }),[3,4,5]);
   document.body.classList.add('printing-inv'); setTimeout(function(){ window.print(); },50);
 };
-window.addEventListener('afterprint',function(){ document.body.classList.remove('printing-rep','printing-inv'); });
+window.addEventListener('afterprint',function(){ document.body.classList.remove('printing-rep','printing-inv','printing-items'); });
 $('#repCsv').onclick=function(){
   if(!repData) return;
   var cols=['codice','nome','categoria','distributore','negozio','magazzino','totale','scorta_min','prezzo_acquisto','prezzo_vendita','valore_a_costo'];
@@ -1512,6 +1600,246 @@ $('#repCsv').onclick=function(){
   a.href=url; a.download='inventario-'+isoDay(new Date())+'.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); },1000);
 };
 $('#repOv').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('show'); });
+
+
+/* ── Elenco articoli (titolare): ogni articolo, con filtri per distributore, categoria e date ── */
+var itm={costs:{},moved:{},sort:'nome',dir:1,rows:[],ready:false};
+function dayOf(d){ return d ? isoDay(d) : ''; }
+function itDay(d){ return d ? d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'; }
+function itemDates(p){ return {creato:tsDate(p.creatoIl), mod:tsDate(p.aggiornatoIl), mov:itm.moved[p.id]||null}; }
+function openItems(){
+  $('#itemsOv').classList.add('show'); itm.ready=false; $('#itBody').innerHTML='<div class="none">Caricamento…</div>';
+  var dsel=$('#itDist'), csel=$('#itCat'), dv=dsel.value, cv=csel.value;
+  dsel.innerHTML='<option value="">Tutti</option>'+distributori.map(function(d){ return '<option value="'+esc(d.id)+'">'+esc(d.nome)+'</option>'; }).join('')+'<option value="_none">(senza distributore)</option>';
+  var cats=Object.keys(products.reduce(function(m,p){ if(p.categoria) m[p.categoria]=1; return m; },{})).sort(function(a,b){ return a.localeCompare(b,'it'); });
+  csel.innerHTML='<option value="">Tutte</option>'+cats.map(function(c){ return '<option value="'+esc(c)+'">'+esc(c)+'</option>'; }).join('')+'<option value="_none">(senza categoria)</option>';
+  dsel.value=dv||''; csel.value=cv||''; if(dsel.value!==(dv||'')) dsel.value=''; if(csel.value!==(cv||'')) csel.value='';
+  Promise.all([loadCosts(),fdb.collection('movimenti').get()]).then(function(r){
+    itm.costs=r[0]; itm.moved={};
+    r[1].docs.forEach(function(d){ var o=d.data({serverTimestamps:'estimate'}), t=tsDate(o.quando); if(!t||!o.prodottoId) return; if(!itm.moved[o.prodottoId]||t>itm.moved[o.prodottoId]) itm.moved[o.prodottoId]=t; });
+    itm.ready=true; renderItems();
+  }).catch(function(er){ console.warn('elenco:',er&&er.code); $('#itBody').innerHTML='<div class="none">Impossibile caricare i dati. Controlla la connessione e le regole del database.</div>'; });
+}
+var IT_COLS=[['nome','Articolo',0],['dist','Distributore',0],['cat','Categoria',0],['neg','Negozio',1],['mag','Magazzino',1],['prezzo','Prezzo',1],['valore','Valore a costo',1],['creato','Inserito',0],['mod','Modificato',0],['mov','Ultimo spostamento',0]];
+function itemVal(p,k){
+  var dt=itemDates(p);
+  switch(k){
+    case 'nome': return norm(p.nome);
+    case 'dist': return norm(distName(p));
+    case 'cat': return norm(p.categoria);
+    case 'neg': return p.qtaNegozio|0;
+    case 'mag': return p.qtaMagazzino|0;
+    case 'prezzo': return p.prezzoVendita||0;
+    case 'valore': return (p.id in itm.costs) ? itm.costs[p.id]*((p.qtaNegozio|0)+(p.qtaMagazzino|0)) : null;
+    default: return dt[k] ? dt[k].getTime() : null;
+  }
+}
+function itemsFiltered(){
+  var q=norm($('#itQ').value), df=$('#itDist').value, cf=$('#itCat').value, sf=$('#itStock').value, kind=$('#itDateKind').value, from=$('#itFrom').value, to=$('#itTo').value;
+  return products.filter(function(p){
+    if(q && !matches(p,q)) return false;
+    if(df==='_none' ? p.distributoreId : (df && p.distributoreId!==df)) return false;
+    if(cf==='_none' ? p.categoria : (cf && p.categoria!==cf)) return false;
+    var tot=(p.qtaNegozio|0)+(p.qtaMagazzino|0);
+    if(sf==='with' && tot<1) return false;
+    if(sf==='none' && tot>0) return false;
+    if(from||to){ var d=dayOf(itemDates(p)[kind]); if(!d) return false; if(from && d<from) return false; if(to && d>to) return false; }
+    return true;
+  });
+}
+function renderItems(){
+  if(!itm.ready) return;
+  var rows=itemsFiltered(), k=itm.sort, dir=itm.dir;
+  rows.sort(function(a,b){
+    var x=itemVal(a,k), y=itemVal(b,k);
+    if(x===null && y===null) return norm(a.nome).localeCompare(norm(b.nome),'it'); if(x===null) return 1; if(y===null) return -1;   // senza dato: sempre in fondo
+    var c = typeof x==='string' ? x.localeCompare(y,'it') : x-y;
+    return c ? c*dir : norm(a.nome).localeCompare(norm(b.nome),'it');
+  });
+  itm.rows=rows;
+  var neg=0, mag=0, val=0, noCost=0;
+  rows.forEach(function(p){ neg+=p.qtaNegozio|0; mag+=p.qtaMagazzino|0; var v=itemVal(p,'valore'); if(v===null){ if(((p.qtaNegozio|0)+(p.qtaMagazzino|0))>0) noCost++; } else val+=v; });
+  $('#itCount').textContent=rows.length+' di '+products.length+' articoli · '+fmtN(neg)+' in negozio · '+fmtN(mag)+' in magazzino · valore a costo '+eur.format(val)+(noCost?' ('+noCost+' senza prezzo di acquisto)':'');
+  $('#itAsof').textContent='Edicola Mannelli · Duomo — elenco articoli del '+new Date().toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+' · '+$('#itCount').textContent;
+  if(!rows.length){ $('#itBody').innerHTML='<div class="none">Nessun articolo con questi filtri.</div>'; return; }
+  $('#itBody').innerHTML='<table class="rt it"><thead><tr>'+IT_COLS.map(function(c){ return '<th data-k="'+c[0]+'" class="'+(c[2]?'n ':'')+(k===c[0]?'on':'')+'">'+esc(c[1])+(k===c[0]?(dir>0?' ▲':' ▼'):'')+'</th>'; }).join('')+'</tr></thead><tbody>'
+    +rows.map(function(p){
+      var dt=itemDates(p), v=itemVal(p,'valore'), codes=[p.codiceProdotto,p.codiceRivenditore,p.codiceCustom,p.barcode].filter(Boolean).join(' · ');
+      return '<tr><td><div class="nm">'+esc(p.nome)+(p.daRicontare?' ⚠':'')+'</div>'+(codes?'<div class="cd">'+esc(codes)+'</div>':'')+'</td><td>'+esc(distName(p)||'—')+'</td><td>'+esc(p.categoria||'—')+'</td>'
+        +'<td class="n">'+fmtN(p.qtaNegozio|0)+'</td><td class="n">'+fmtN(p.qtaMagazzino|0)+'</td><td class="n">'+eur.format(p.prezzoVendita||0)+'</td><td class="n">'+(v===null?'—':eur.format(v))+'</td>'
+        +'<td>'+itDay(dt.creato)+'</td><td>'+itDay(dt.mod)+'</td><td>'+itDay(dt.mov)+'</td></tr>';
+    }).join('')+'</tbody></table>';
+}
+$('#repItems').onclick=openItems;
+$('#itClose').onclick=function(){ $('#itemsOv').classList.remove('show'); };
+['itQ','itDist','itCat','itStock','itDateKind','itFrom','itTo'].forEach(function(id){ $('#'+id).addEventListener('input',renderItems); $('#'+id).addEventListener('change',renderItems); });
+$('#itReset').onclick=function(){ ['itQ','itDist','itCat','itStock','itFrom','itTo'].forEach(function(id){ $('#'+id).value=''; }); $('#itDateKind').value='creato'; renderItems(); };
+$('#itBody').addEventListener('click',function(e){
+  var th=e.target.closest('th[data-k]'); if(!th) return;
+  var k=th.dataset.k; if(itm.sort===k) itm.dir=-itm.dir; else { itm.sort=k; itm.dir=(k==='creato'||k==='mod'||k==='mov')?-1:1; }
+  renderItems();
+});
+$('#itPrint').onclick=function(){ document.body.classList.add('printing-items'); setTimeout(function(){ window.print(); },50); };
+$('#itCsv').onclick=function(){
+  var cols=['codice','nome','categoria','distributore','negozio','magazzino','totale','prezzo_acquisto','prezzo_vendita','valore_a_costo','inserito','modificato','ultimo_spostamento'];
+  function cell(v){ v=v==null?'':String(v); if(/^[=+\-@]/.test(v)) v="'"+v; return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+  function dec(n){ return n==null?'':(Math.round(n*100)/100).toFixed(2).replace('.',','); }
+  var lines=[cols.join(';')].concat(itm.rows.map(function(p){
+    var dt=itemDates(p), tot=(p.qtaNegozio|0)+(p.qtaMagazzino|0), c=(p.id in itm.costs)?itm.costs[p.id]:null, v=itemVal(p,'valore');
+    return [p.codiceCustom||p.codiceProdotto||'',p.nome,p.categoria||'',distName(p),p.qtaNegozio|0,p.qtaMagazzino|0,tot,dec(c),dec(p.prezzoVendita||0),v===null?'':dec(v),dayOf(dt.creato),dayOf(dt.mod),dayOf(dt.mov)].map(cell).join(';');
+  }));
+  var blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}), url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download='elenco-articoli-'+isoDay(new Date())+'.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); },1000);
+};
+$('#itemsOv').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('show'); });
+
+/* ── Fatture (titolare): foto o PDF su Firebase Storage, con data e distributore ── */
+var fat={rows:[],unsub:null,stor:null,files:[],busy:false,cur:null};
+var FAT_MAX_FILES=12, FAT_MAX_BYTES=15*1024*1024;
+function getStorage(){
+  if(fat.stor) return Promise.resolve(fat.stor);
+  var load = (typeof firebase!=='undefined' && firebase.storage) ? Promise.resolve() : loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js').catch(function(){ throw {code:'no-sdk'}; });
+  return load.then(function(){
+    if(!firebase.storage) throw {code:'no-sdk'};
+    fat.stor=firebase.storage();
+    try{ fat.stor.setMaxUploadRetryTime(30000); fat.stor.setMaxOperationRetryTime(30000); }catch(e){}
+    return fat.stor;
+  });
+}
+function fatErrText(er){
+  var c=er&&er.code||'';
+  if(c==='storage/unauthorized'||c==='permission-denied') return 'Permesso negato: pubblica le regole aggiornate (firestore.rules e storage.rules) in Firebase.';
+  if(c==='storage/bucket-not-found'||c==='storage/project-not-found'||c==='storage/no-default-bucket') return 'Storage non è ancora attivo: in Firebase apri «Storage» e premi «Inizia».';
+  if(c==='storage/retry-limit-exceeded'||c==='storage/canceled'||c==='unavailable'||c==='no-sdk') return 'Manca la connessione. Non salvata: riprova.';
+  return 'Non salvata ('+(c||'errore')+'). Riprova.';
+}
+function openFatture(){
+  $('#fatOv').classList.add('show'); $('#fatNewBox').classList.add('hidden');
+  var sel=$('#fatDistF'), v=sel.value;
+  sel.innerHTML='<option value="">Tutti</option>'+distributori.map(function(d){ return '<option value="'+esc(d.id)+'">'+esc(d.nome)+'</option>'; }).join('');
+  sel.value=v||''; if(sel.value!==(v||'')) sel.value='';
+  $('#fatList').innerHTML='<div class="empty">Caricamento…</div>';
+  if(fat.unsub) fat.unsub();
+  fat.unsub=fdb.collection('fatture').onSnapshot(function(snap){
+    fat.rows=snap.docs.map(function(d){ var o=d.data(); o.id=d.id; return o; }); renderFatture();
+  },function(err){ console.warn('fatture:',err.code); $('#fatList').innerHTML='<div class="empty">Impossibile leggere le fatture. Pubblica le regole aggiornate (firestore.rules).</div>'; });
+}
+function closeFatture(){ $('#fatOv').classList.remove('show'); if(fat.unsub){ fat.unsub(); fat.unsub=null; } }
+function renderFatture(){
+  var df=$('#fatDistF').value, from=$('#fatFrom').value, to=$('#fatTo').value;
+  var rows=fat.rows.filter(function(r){ return (!df||r.distributoreId===df) && (!from||String(r.data)>=from) && (!to||String(r.data)<=to); })
+    .sort(function(a,b){ return String(b.data).localeCompare(String(a.data)); });
+  $('#fatList').innerHTML = rows.length ? rows.map(function(r){
+    var dn=(r.distributoreId&&distById[r.distributoreId]&&distById[r.distributoreId].nome)||r.distributoreNome||'';
+    var n=(r.files||[]).length;
+    return '<button type="button" class="fatrow" data-id="'+esc(r.id)+'"><span class="dt">'+esc(itDate(r.data))+'</span><span>'+esc(dn||'(senza distributore)')+'</span><span class="pg">'+n+(n===1?' pagina':' pagine')+'</span><span class="sub">'+esc(r.nota||'')+'</span></button>';
+  }).join('') : '<div class="empty">'+(fat.rows.length?'Nessuna fattura con questi filtri.':'Nessuna fattura caricata. Premi «Nuova fattura».')+'</div>';
+}
+['fatDistF','fatFrom','fatTo'].forEach(function(id){ $('#'+id).addEventListener('change',renderFatture); });
+$('#fatClose').onclick=closeFatture;
+$('#fatOv').addEventListener('click',function(e){ if(e.target===this && !fat.busy) closeFatture(); });
+$('#fatNew').onclick=function(){
+  fat.files=[]; $('#ftErr').textContent=''; $('#ftNota').value=''; $('#ftData').value=isoDay(new Date());
+  $('#ftDist').innerHTML='<option value="">(nessuno)</option>'+distributori.map(function(d){ return '<option value="'+esc(d.id)+'">'+esc(d.nome)+'</option>'; }).join('');
+  renderFtFiles(); $('#fatNewBox').classList.remove('hidden');
+};
+$('#ftCancel').onclick=function(){ if(!fat.busy){ fat.files=[]; $('#fatNewBox').classList.add('hidden'); } };
+function renderFtFiles(){
+  $('#ftFiles').innerHTML=fat.files.map(function(f,i){ return '<div class="ftfile"><span>'+(i+1)+'. '+esc(f.name)+' <span class="hint">('+Math.max(1,Math.round(f.size/1024))+' KB)</span></span><button type="button" data-i="'+i+'" aria-label="Togli">✕</button></div>'; }).join('');
+  $('#ftSave').disabled = fat.busy || !fat.files.length;
+}
+$('#ftFiles').addEventListener('click',function(e){ var b=e.target.closest('button[data-i]'); if(!b||fat.busy) return; fat.files.splice(+b.dataset.i,1); renderFtFiles(); });
+function shrinkToBlob(file,max,quality){
+  return new Promise(function(res){
+    var url=URL.createObjectURL(file), img=new Image();
+    img.onload=function(){
+      var sc=Math.min(1,max/Math.max(img.width,img.height)), w=Math.max(1,Math.round(img.width*sc)), h=Math.max(1,Math.round(img.height*sc));
+      var c=document.createElement('canvas'); c.width=w; c.height=h;
+      var x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,w,h); x.drawImage(img,0,0,w,h); URL.revokeObjectURL(url);
+      c.toBlob(function(b){ res(b&&b.size<file.size ? b : file); },'image/jpeg',quality);
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); res(file); };   // formato non leggibile dal browser: si carica l'originale
+    img.src=url;
+  });
+}
+function addFtFiles(list){
+  var err='';
+  Array.prototype.forEach.call(list,function(f){
+    var isPdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name), isImg=/^image\//.test(f.type);
+    if(!isPdf&&!isImg){ err='«'+f.name+'»: servono foto o PDF.'; return; }
+    if(f.size>FAT_MAX_BYTES*(isImg?4:1)){ err='«'+f.name+'» è troppo grande (massimo 15 MB).'; return; }
+    if(fat.files.length>=FAT_MAX_FILES){ err='Massimo '+FAT_MAX_FILES+' pagine per fattura.'; return; }
+    fat.files.push(f);
+  });
+  $('#ftErr').textContent=err; renderFtFiles();
+}
+$('#ftCam').addEventListener('change',function(){ addFtFiles(this.files); this.value=''; });
+$('#ftPick').addEventListener('change',function(){ addFtFiles(this.files); this.value=''; });
+$('#ftSave').onclick=function(){
+  if(fat.busy||!fat.files.length) return;
+  var data=$('#ftData').value; if(!data){ $('#ftErr').textContent='Scegli la data della fattura.'; return; }
+  var distId=$('#ftDist').value, dn=distId&&distById[distId]?distById[distId].nome:'', nota=$('#ftNota').value.trim();
+  fat.busy=true; $('#ftSave').disabled=true; $('#ftSave').textContent='Caricamento…'; $('#ftErr').textContent='';
+  var id=fdb.collection('fatture').doc().id, done=[], files=fat.files.slice();
+  function fail(er){
+    console.warn('fattura:',er&&er.code,er&&er.message);
+    getStorage().then(function(st){ done.forEach(function(f){ st.ref(f.path).delete().catch(function(){}); }); }).catch(function(){});
+    fat.busy=false; $('#ftSave').textContent='Salva fattura'; renderFtFiles(); $('#ftErr').textContent=fatErrText(er);
+  }
+  getStorage().then(function(st){
+    return files.reduce(function(chain,f,i){
+      return chain.then(function(){
+        $('#ftSave').textContent='Caricamento '+(i+1)+' di '+files.length+'…';
+        var isPdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name);
+        return (isPdf?Promise.resolve(f):shrinkToBlob(f,2200,0.85)).then(function(b){
+          var jpg=!isPdf && b!==f, ext=isPdf?'pdf':(jpg?'jpg':((f.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg'));
+          var type=isPdf?'application/pdf':(jpg?'image/jpeg':(f.type||'image/jpeg'));
+          if(b.size>FAT_MAX_BYTES) throw {code:'too-big'};
+          var path='fatture/'+id+'/'+(i+1)+'.'+ext;
+          return st.ref(path).put(b,{contentType:type}).then(function(){ done.push({path:path,nome:(f.name||('pagina '+(i+1))),tipo:type,dim:b.size}); });
+        });
+      });
+    },Promise.resolve());
+  }).then(function(){
+    return fdb.doc('fatture/'+id).set({data:data,distributoreId:distId||'',distributoreNome:dn,nota:nota,files:done,caricatoIl:firebase.firestore.FieldValue.serverTimestamp()});
+  }).then(function(){
+    fat.busy=false; fat.files=[]; $('#ftSave').textContent='Salva fattura'; $('#fatNewBox').classList.add('hidden'); toast('Fattura salvata.');
+  }).catch(function(er){ if(er&&er.code==='too-big'){ er={code:'x'}; $('#ftErr').textContent=''; fail(er); $('#ftErr').textContent='Un file supera i 15 MB: riducilo o dividilo.'; } else fail(er); });
+};
+$('#fatList').addEventListener('click',function(e){
+  var b=e.target.closest('.fatrow'); if(!b) return;
+  var r=fat.rows.filter(function(x){ return x.id===b.dataset.id; })[0]; if(r) openFatView(r);
+});
+function openFatView(r){
+  fat.cur=r; $('#fvErr').textContent='';
+  var dn=(r.distributoreId&&distById[r.distributoreId]&&distById[r.distributoreId].nome)||r.distributoreNome||'(senza distributore)';
+  $('#fvTitle').textContent='Fattura del '+itDate(r.data);
+  $('#fvInfo').innerHTML='<b>'+esc(dn)+'</b>'+(r.nota?'<br>'+esc(r.nota):'');
+  var box=$('#fvFiles'); box.innerHTML='<div class="hint">Caricamento delle pagine…</div>';
+  $('#fatViewOv').classList.add('show');
+  var files=r.files||[];
+  getStorage().then(function(st){
+    return Promise.all(files.map(function(f){ return st.ref(f.path).getDownloadURL().then(function(u){ return {f:f,u:u}; }).catch(function(){ return {f:f,u:null}; }); }));
+  }).then(function(list){
+    if(fat.cur!==r) return;
+    box.innerHTML=list.map(function(x,i){
+      if(!x.u) return '<div class="hint">Pagina '+(i+1)+': non riesco a leggerla.</div>';
+      return x.f.tipo==='application/pdf'
+        ? '<div style="margin:8px 0"><a class="btn" target="_blank" rel="noopener" href="'+esc(x.u)+'">📄 Apri PDF — '+esc(x.f.nome)+'</a></div>'
+        : '<a target="_blank" rel="noopener" href="'+esc(x.u)+'"><img alt="Pagina '+(i+1)+'" src="'+esc(x.u)+'"></a>';
+    }).join('') || '<div class="hint">Nessun file.</div>';
+  }).catch(function(){ box.innerHTML='<div class="hint">Non riesco a caricare i file. Controlla la connessione.</div>'; });
+}
+$('#fvClose').onclick=function(){ fat.cur=null; $('#fatViewOv').classList.remove('show'); };
+$('#fvDel').onclick=function(){
+  var r=fat.cur; if(!r) return;
+  if(!confirm('Eliminare questa fattura e i suoi file? Non si può annullare.')) return;
+  $('#fvErr').textContent='';
+  fdb.doc('fatture/'+r.id).delete().then(function(){
+    fat.cur=null; $('#fatViewOv').classList.remove('show'); toast('Fattura eliminata.');
+    getStorage().then(function(st){ (r.files||[]).forEach(function(f){ st.ref(f.path).delete().catch(function(){}); }); }).catch(function(){});
+  }).catch(function(er){ $('#fvErr').textContent=fatErrText(er); });
+};
 
 /* ── Orologio ── */
 function tick(){ var d=new Date(); $('#clockT').textContent=d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}); $('#clockD').textContent=d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}); }

@@ -45,6 +45,11 @@ service cloud.firestore {
       allow read, write: if titolare();
     }
 
+    // Fatture caricate (i file stanno in Firebase Storage; qui data, distributore, nota e percorsi). Solo il titolare.
+    match /fatture/{id} {
+      allow read, write: if titolare();
+    }
+
     // Foto dei prodotti (versione grande; la miniatura sta nel prodotto). Le vedono tutti, le modifica solo il titolare.
     match /foto/{id} {
       allow read: if titolare() || personale();
