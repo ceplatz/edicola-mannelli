@@ -69,23 +69,51 @@ service cloud.firestore {
       allow write: if titolare();
     }
 
-    // Registro movimenti: lo legge SOLO il titolare. Si può aggiungere (anche dal
-    // personale quando sposta merce). Mai modificare. Solo il titolare può eliminare
-    // una riga (es. spostamento fatto per errore).
+    // Registro movimenti: lo legge SOLO il titolare. Si può aggiungere, mai modificare.
+    // Tre tipi di riga:
+    //  - spostamento tra negozio e magazzino (anche il personale, con le verifiche di sempre)
+    //  - carico: pezzi arrivati dall'esterno (acquisti, primo inserimento) - solo il titolare
+    //  - rettifica: correzione manuale di una quantità - solo il titolare
+    // Solo il titolare può eliminare una riga (es. fatta per errore).
+    function nuovo() { return request.resource.data; }
+    function tipoRiga() { return nuovo().get('tipo', 'sposta'); }
+    function sposta() {
+      return tipoRiga() == 'sposta'
+        && nuovo().da in ['magazzino', 'negozio']
+        && nuovo().a in ['magazzino', 'negozio']
+        && nuovo().da != nuovo().a
+        && !('luogo' in nuovo()) && !('delta' in nuovo())
+        && (titolare()
+            || exists(/databases/$(database)/documents/personale/$(nuovo().staffId)));
+    }
+    function carico() {
+      return titolare() && tipoRiga() == 'carico'
+        && nuovo().da == 'esterno'
+        && nuovo().a in ['magazzino', 'negozio']
+        && !('luogo' in nuovo()) && !('delta' in nuovo());
+    }
+    function rettifica() {
+      return titolare() && tipoRiga() == 'rettifica'
+        && nuovo().luogo in ['magazzino', 'negozio']
+        && nuovo().delta is int && nuovo().delta != 0
+        && nuovo().qta == (nuovo().delta > 0 ? nuovo().delta : -nuovo().delta)
+        && !('da' in nuovo()) && !('a' in nuovo());
+    }
     match /movimenti/{id} {
       allow read: if titolare();
       allow create: if (titolare() || personale())
-        && request.resource.data.keys().hasOnly(
+        && nuovo().keys().hasOnly(
              ['prodottoId', 'prodottoNome', 'codice', 'da', 'a', 'qta',
-              'staffId', 'staffNome', 'ruolo', 'quando'])
-        && request.resource.data.quando == request.time
-        && request.resource.data.qta is int && request.resource.data.qta > 0
-        && request.resource.data.da in ['magazzino', 'negozio']
-        && request.resource.data.a in ['magazzino', 'negozio']
-        && request.resource.data.da != request.resource.data.a
-        && request.resource.data.ruolo == (titolare() ? 'titolare' : 'personale')
-        && (titolare()
-            || exists(/databases/$(database)/documents/personale/$(request.resource.data.staffId)));
+              'staffId', 'staffNome', 'ruolo', 'quando', 'quandoLocale', 'tipo', 'nota', 'luogo', 'delta'])
+        && nuovo().quando == request.time
+        && nuovo().qta is int && nuovo().qta > 0
+        && nuovo().get('nota', '') is string && nuovo().get('nota', '').size() <= 120
+        // ora reale dell'azione sul dispositivo (può essere precedente se la rete mancava): ragionevolmente vicina a quella del server
+        && nuovo().get('quandoLocale', request.time) is timestamp
+        && nuovo().get('quandoLocale', request.time) <= request.time + duration.value(10, 'm')
+        && nuovo().get('quandoLocale', request.time) >= request.time - duration.value(45, 'd')
+        && nuovo().ruolo == (titolare() ? 'titolare' : 'personale')
+        && (sposta() || carico() || rettifica());
       allow update: if false;
       allow delete: if titolare();
     }

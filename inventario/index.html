@@ -89,7 +89,16 @@ header{display:flex;align-items:center;gap:14px;padding:10px 20px;background:var
 .who{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border:1.5px solid var(--line);border-radius:999px;background:var(--sand-2);font-size:13px;font-weight:700}
 .who .role{color:var(--gold);letter-spacing:.08em;text-transform:uppercase;font-size:11px}
 .who button{border:none;background:var(--espresso);color:var(--sand-3);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px}
-@media(max-width:640px){.locale{display:none}.clock{display:none}header{padding:8px 12px}.brand img{height:44px}}
+/* indicatore di sincronizzazione (come nel POS Verdi): verde che pulsa piano = tutto salvato nel database; rosso = senza rete, si salva sul dispositivo */
+.sync{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border:1.5px solid var(--line);border-radius:999px;background:var(--sand-2);font-size:12px;font-weight:700;color:var(--espresso);cursor:pointer;white-space:nowrap}
+.sync i{width:10px;height:10px;border-radius:50%;background:#2f9e5f;flex-shrink:0}
+.sync.ok i{animation:syncpulse 3.4s ease-in-out infinite}
+.sync.wait i{background:#d98e04;animation:syncpulse 1.2s ease-in-out infinite}
+.sync.bad{border-color:#e3b4b4;background:#fdf0f0;color:#a33}
+.sync.bad i{background:#c0392b}
+@keyframes syncpulse{0%,100%{box-shadow:0 0 0 0 rgba(47,158,95,.55);opacity:1}50%{box-shadow:0 0 0 6px rgba(47,158,95,0);opacity:.55}}
+@media (prefers-reduced-motion:reduce){.sync i{animation:none !important}}
+@media(max-width:640px){.sync{padding:6px 9px;font-size:11px}.locale{display:none}.clock{display:none}header{padding:8px 12px}.brand img{height:44px}}
 
 main{width:100%;max-width:1000px;margin:0 auto;padding:18px 20px 40px}
 .searchbar{display:flex;align-items:center;gap:10px;background:var(--sand-3);border:1.5px solid var(--line);border-radius:16px;padding:6px 8px 6px 16px;box-shadow:var(--shadow);position:relative;z-index:5}
@@ -195,6 +204,7 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
 .logrow .who2{font-size:12px;color:var(--espresso-2)}
 .logdel{border:none;background:none;color:var(--danger);font-size:11px;text-decoration:underline;cursor:pointer;padding:2px 4px;margin-left:6px;opacity:.75}
 .logdel:hover{opacity:1}
+.logrow .q2.up{color:#2f7d4f}.logrow .q2.down{color:var(--danger)}
 .logrow .q2{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:24px;grid-row:span 2;align-self:center}
 .sheet.wide{max-width:640px}
 .sheet select,.sheet textarea,.filterrow select{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px;outline:none;font-family:inherit}
@@ -280,6 +290,12 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 .fatrow .sub{font-size:12px;color:var(--espresso-2)}
 .fatrow .pg{grid-row:span 2;align-self:center;font-size:13px;color:var(--espresso-2)}
 .sheet label.filebtn{text-transform:none;letter-spacing:0;font-size:inherit;color:inherit;margin:0;display:inline-block}
+#carWho{display:flex;flex-wrap:wrap;gap:8px}
+.hrow{display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.hrow .hw{font-size:12px;color:var(--espresso-2);text-align:right;line-height:1.3;grid-row:span 2;align-self:center}
+.hrow .hq{font-weight:700;grid-row:span 2;align-self:center;font-variant-numeric:tabular-nums}
+.hrow .hq.up{color:#2f7d4f}.hrow .hq.down{color:var(--danger)}
+.hrow .hs{font-size:12px;color:var(--espresso-2)}
 #fvFiles img{max-width:100%;border:1px solid var(--line);border-radius:10px;margin:6px 0;display:block}
 @media (max-width:640px){.bars .bar{grid-template-columns:90px 1fr 70px}}
 @media print{
@@ -355,6 +371,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
     <div class="brand"><img src="logo.png" alt="Edicola Mannelli"></div>
     <div class="locale">Duomo</div>
     <div class="header-right">
+      <button type="button" class="sync ok" id="syncPill" aria-live="polite"><i></i><span id="syncTxt">Sincronizzato</span></button>
       <div class="clock"><div class="t" id="clockT">--:--</div><div class="d" id="clockD"></div></div>
       <div class="who"><span id="whoRole" class="role"></span><button id="logoutBtn" title="Esci" aria-label="Esci">⎋</button></div>
     </div>
@@ -421,6 +438,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
       <div><label>Quantità in negozio</label><input name="qtaNegozio" inputmode="numeric" value="0"></div>
       <div><label>Quantità in magazzino</label><input name="qtaMagazzino" inputmode="numeric" value="0"></div>
     </div>
+    <div class="hint" id="qtyHint" style="margin:2px 2px 6px"></div>
     <label class="chk"><input type="checkbox" name="daRicontare"> ⚠ Da ricontare</label>
     <input name="ricontareNota" class="hidden" maxlength="120" placeholder="Nota (es. il foglio indicava -3)">
     <label>Descrizione</label>
@@ -471,7 +489,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 
 <!-- Registro movimenti -->
 <div class="ov" id="logOv"><div class="sheet wide">
-  <h3>Registro movimenti</h3>
+  <h3>Registro movimenti</h3><p class="hint" style="margin:-6px 0 8px">Spostamenti, carichi (pezzi arrivati) e correzioni delle quantità.</p>
   <input id="logQ" placeholder="Filtra per prodotto o persona…" autocomplete="off">
   <div id="logList" style="margin-top:8px"></div>
   <div class="acts"><button type="button" class="btn p" id="logClose">Chiudi</button></div>
@@ -479,7 +497,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 
 <!-- Elimina spostamento (titolare) -->
 <div class="ov" id="delOv" style="z-index:5600"><div class="sheet" style="max-width:460px">
-  <h3>Eliminare questo spostamento?</h3>
+  <h3 id="delTitle">Eliminare questo spostamento?</h3>
   <div id="delInfo" style="font-size:15px;line-height:1.5"></div>
   <div class="ferr" id="delErr" style="margin-top:10px"></div>
   <div class="acts" style="flex-direction:column;align-items:stretch;margin-top:14px">
@@ -487,6 +505,22 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
     <button type="button" class="btn" id="delOnly">Elimina solo dal registro (le quantità restano come sono)</button>
     <button type="button" class="btn" id="delCancel">Annulla</button>
   </div>
+</div></div>
+
+<!-- Carico: pezzi acquistati (titolare) -->
+<div class="ov" id="carOv" style="z-index:5400"><div class="sheet" style="max-width:480px">
+  <h3>Aggiungi pezzi</h3>
+  <div id="carInfo" style="font-size:15px;line-height:1.45"></div>
+  <label>Quanti pezzi sono arrivati?</label>
+  <div class="stepper"><button type="button" id="carMinus" aria-label="Meno">−</button><input id="carQty" inputmode="numeric" value="1"><button type="button" id="carPlus" aria-label="Più">+</button></div>
+  <label>Dove li metti?</label>
+  <div class="seg" id="carDest"><button type="button" data-d="magazzino" class="on">Magazzino</button><button type="button" data-d="negozio">Negozio</button></div>
+  <label>Chi li registra?</label>
+  <div class="chips" id="carWho"></div>
+  <label>Nota (facoltativa)</label>
+  <input id="carNota" maxlength="120" placeholder="Es. fattura n. 123, ordine di ottobre…" autocomplete="off">
+  <div class="ferr" id="carErr"></div>
+  <div class="acts"><button type="button" class="btn" id="carCancel">Annulla</button><button type="button" class="btn p" id="carGo">Aggiungi al magazzino</button></div>
 </div></div>
 
 <!-- Impostazioni (titolare) -->
@@ -542,7 +576,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
     <div><label>Giacenza</label><select id="itStock"><option value="">Tutti</option><option value="with">Con pezzi</option><option value="none">Esauriti (0)</option></select></div>
   </div>
   <div class="frow noprint">
-    <div><label>Data di</label><select id="itDateKind"><option value="creato">Inserimento</option><option value="mod">Ultima modifica</option><option value="mov">Ultimo spostamento</option></select></div>
+    <div><label>Data di</label><select id="itDateKind"><option value="creato">Inserimento</option><option value="car">Ultimo carico</option><option value="mod">Ultima modifica</option><option value="mov">Ultimo spostamento</option></select></div>
     <div><label>Dal</label><input type="date" id="itFrom"></div>
     <div><label>Al</label><input type="date" id="itTo"></div>
     <button type="button" class="btn" id="itReset">Azzera filtri</button>
@@ -654,6 +688,43 @@ function fbInit(){
   return true;
 }
 
+/* ── Sincronizzazione: il dispositivo salva da solo e invia tutto appena torna la rete ── */
+var net={online:(typeof navigator==='undefined'||navigator.onLine!==false), cacheOnly:false, pending:false, pendDocs:0, t0:Date.now()}, pendGen=0;
+function isOnline(){ return net.online && !(net.cacheOnly && Date.now()-net.t0>6000); }
+function syncUpdate(){
+  var el=$('#syncPill'), tx=$('#syncTxt'); if(!el) return;
+  var off=!isOnline(), waiting=net.pending||net.pendDocs>0, cls, txt;
+  if(off){ cls='bad'; txt = waiting ? 'Offline · modifiche salvate qui' : 'Offline'; }
+  else if(waiting){ cls='wait'; txt='Sincronizzo…'; }
+  else { cls='ok'; txt='Sincronizzato'; }
+  el.className='sync '+cls; tx.textContent=txt;
+}
+// Quante scritture aspettano di partire: Firestore lo sa anche dopo che l'app è stata chiusa e riaperta
+function checkPending(){
+  if(!fdb) return; var g=++pendGen; net.pending=true; syncUpdate();
+  fdb.waitForPendingWrites().then(function(){ if(g===pendGen){ net.pending=false; syncUpdate(); } }).catch(function(){ if(g===pendGen){ net.pending=false; syncUpdate(); } });
+}
+function trackWrite(p){ checkPending(); p.then(checkPending,checkPending); }
+window.addEventListener('online',function(){ net.online=true; net.t0=Date.now(); syncUpdate(); checkPending(); });
+window.addEventListener('offline',function(){ net.online=false; syncUpdate(); });
+setInterval(syncUpdate,3000);
+$('#syncPill').addEventListener('click',function(){
+  toast(!isOnline() ? 'Senza rete: quello che salvi resta su questo dispositivo e parte da solo appena torna il segnale. Anche se chiudi l\'app, non va perso: si invia alla prossima apertura con la rete.'
+       : (net.pending||net.pendDocs>0) ? 'Sto inviando al database le modifiche fatte senza rete…' : 'Tutto è salvato nel database.');
+});
+// Salva e attende la conferma del database per un attimo; se manca la rete la modifica resta in coda sul dispositivo e si prosegue subito.
+function commitFast(b){
+  return new Promise(function(resolve,reject){
+    var settled=false, pr=b.commit(); trackWrite(pr);
+    var t=setTimeout(function(){ if(!settled){ settled=true; resolve({queued:true}); } }, isOnline()?2500:0);
+    pr.then(function(){ if(!settled){ settled=true; clearTimeout(t); resolve({queued:false}); } },
+            function(er){ console.warn('scrittura rifiutata:',er&&er.code); if(!settled){ settled=true; clearTimeout(t); reject(er); } else syncProblem(er); });
+  });
+}
+function syncProblem(er){ toast('Il database ha rifiutato una modifica fatta senza rete ('+((er&&er.code)||'errore')+'). Controlla l\'articolo e rifai la modifica.'); }
+var QUEUED_MSG='Salvato su questo dispositivo — si invia da solo appena torna la rete.';
+if('serviceWorker' in navigator && location.protocol!=='file:') window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(e){ console.warn('sw:',e&&e.message); }); });
+
 /* ── Login ── */
 var ownerMode=false;
 $('#ownerToggle').addEventListener('click',function(e){
@@ -690,7 +761,7 @@ function onUser(user){
   $('#whoRole').textContent = role==='titolare' ? 'Titolare' : 'Personale';
   $('#loginOverlay').classList.add('hidden'); $('#app').classList.remove('hidden');
   $('#loginBtn').disabled=false; $('#loginBtn').textContent='Entra';
-  buildTiles(); startDistributori(); startProducts(); startStaff();
+  buildTiles(); startDistributori(); startProducts(); startStaff(); checkPending();
 }
 
 /* ── Home: tessere ── */
@@ -716,7 +787,8 @@ function buildTiles(){
 /* ── Prodotti + ricerca ── */
 function startProducts(){
   if(unsub) unsub();
-  unsub = fdb.collection('prodotti').onSnapshot(function(snap){
+  unsub = fdb.collection('prodotti').onSnapshot({includeMetadataChanges:true}, function(snap){
+    net.cacheOnly=!!(snap.metadata&&snap.metadata.fromCache); net.pendDocs=snap.docs.filter(function(d){ return d.metadata&&d.metadata.hasPendingWrites; }).length; syncUpdate();
     products = snap.docs.map(function(d){ var o=d.data(); o.id=d.id; return o; });
     byId={}; products.forEach(function(p){ byId[p.id]=p; });
     fillCatSelects();
@@ -790,8 +862,8 @@ function openView(id){
   sh.innerHTML='<h3>'+esc(p.nome)+'</h3>'+(p.miniatura?'<img class="viewphoto" id="viewPhoto" alt="" src="'+esc(p.miniatura)+'">':'')+(p.daRicontare?'<div class="warnbox">⚠ Da ricontare'+(p.ricontareNota?' — '+esc(p.ricontareNota):'')+'</div>':'')+(p.descrizione?'<div class="descr">'+esc(p.descrizione)+'</div>':'')
    +'<div class="res" style="cursor:default;border:none;background:none;padding:0"><div class="pr" style="font-size:30px">'+eur.format(p.prezzoVendita||0)+'</div></div>'
    +'<div class="bigqty"><div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">In negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">In magazzino<b>'+(p.qtaMagazzino|0)+'</b></div></div>'
-   +'<dl class="det">'+rows+'</dl><div id="costRow"></div><div id="histRow"></div>'
-   +'<div class="acts">'+(role==='titolare'?'<button class="btn" id="editBtn">Modifica</button>':'')+'<button class="btn" id="moveBtn">Sposta</button><button class="btn p" id="closeView">Chiudi</button></div>';
+   +'<dl class="det">'+rows+'</dl><div id="costRow"></div><div id="histMov"></div><div id="histRow"></div>'
+   +'<div class="acts">'+(role==='titolare'?'<button class="btn" id="editBtn">Modifica</button><button class="btn" id="carBtn">＋ Carico</button>':'')+'<button class="btn" id="moveBtn">Sposta</button><button class="btn p" id="closeView">Chiudi</button></div>';
   $('#viewOv').classList.add('show');
   viewingId=id;
   if(p.miniatura) fdb.doc('foto/'+id).get().then(function(d){ var im=$('#viewPhoto'); if(viewingId===id && d.exists && im) im.src=d.data().img; }).catch(function(){});
@@ -808,6 +880,8 @@ function openView(id){
         +(rows.length>8?'<div class="hint">…e altri '+(rows.length-8)+'</div>':'')+'</div>';
     }).catch(function(){});
     $('#editBtn').onclick=function(){ $('#viewOv').classList.remove('show'); openForm(id); };
+    $('#carBtn').onclick=function(){ openCarico(p); };
+    histOpen=false; loadProdHistory(id);
     fdb.doc('prodotti/'+id+'/privato/costo').get().then(function(d){
       var c=d.exists?d.data().prezzoAcquisto:null;
       if(c!=null){ var m=(p.prezzoVendita||0)-c;
@@ -818,7 +892,7 @@ function openView(id){
 $('#viewOv').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('show'); });
 
 /* ── Modulo prodotto (titolare) ── */
-var pf=$('#pf'), editingId=null;
+var pf=$('#pf'), editingId=null, formBase={negozio:0,magazzino:0};
 /* ── Foto prodotto: ridimensionata sul dispositivo e salvata nel database (nessun piano a pagamento) ── */
 var photo={full:null,thumb:null,remove:false};
 function shrinkImage(file,max,quality){
@@ -886,7 +960,10 @@ function openForm(id){
   pf.prezzoVendita.value = p? fmtIn(p.prezzoVendita) : '';
   pf.qtaNegozio.value = p? (p.qtaNegozio|0) : 0;
   pf.qtaMagazzino.value = p? (p.qtaMagazzino|0) : 0;
+  formBase={negozio:p?(p.qtaNegozio|0):0, magazzino:p?(p.qtaMagazzino|0):0};   // i numeri come erano all'apertura della scheda
   pf.prezzoAcquisto.value='';
+  $('#qtyHint').textContent = id ? 'Per aggiungere pezzi appena acquistati usa «＋ Carico» nella scheda dell\'articolo: resta registrato quando e quanti. Cambiando qui un numero, viene registrata una «correzione».'
+                                 : 'Le quantità inserite qui vengono registrate come primo carico, con data e ora.';
   if(id) fdb.doc('prodotti/'+id+'/privato/costo').get().then(function(d){ if(d.exists && editingId===id) pf.prezzoAcquisto.value=fmtIn(d.data().prezzoAcquisto); }).catch(function(){});
   $('#formOv').classList.add('show'); setTimeout(function(){ pf.nome.focus(); },50);
 }
@@ -896,7 +973,7 @@ $('#scanForm').onclick=function(){ scan().then(function(c){ if(c) pf.barcode.val
 $('#delBtn').onclick=function(){
   var p=byId[editingId]; if(!p || !confirm('Eliminare «'+p.nome+'»? L\'operazione non si può annullare.')) return;
   var b=fdb.batch(); b.delete(fdb.doc('prodotti/'+editingId+'/privato/costo')); b.delete(fdb.doc('foto/'+editingId)); b.delete(fdb.doc('prodotti/'+editingId));
-  b.commit().then(function(){ $('#formOv').classList.remove('show'); toast('Prodotto eliminato.'); }).catch(function(){ $('#ferr').textContent='Eliminazione non riuscita. Riprova.'; });
+  commitFast(b).then(function(r){ $('#formOv').classList.remove('show'); toast(r.queued?QUEUED_MSG:'Prodotto eliminato.'); }).catch(function(){ $('#ferr').textContent='Eliminazione non riuscita. Riprova.'; });
 };
 pf.addEventListener('submit',function(e){
   e.preventDefault();
@@ -919,15 +996,30 @@ pf.addEventListener('submit',function(e){
   if(dup){ err.textContent='Questo '+(dup.k==='barcode'?'codice a barre':'codice prodotto')+' è già usato da «'+dup.o.nome+'».'; return; }
   var sv=$('#formSave'); sv.disabled=true;
   var ref = editingId ? fdb.doc('prodotti/'+editingId) : fdb.collection('prodotti').doc();
-  if(!editingId) rec.creatoIl=firebase.firestore.FieldValue.serverTimestamp();
-  var b=fdb.batch();
+  if(!editingId) rec.creatoIl=firebase.firestore.Timestamp.fromDate(new Date());
+  var b=fdb.batch(), F=firebase.firestore.FieldValue, newQ={negozio:rec.qtaNegozio, magazzino:rec.qtaMagazzino}, logP={id:ref.id,nome:nome,codiceProdotto:rec.codiceProdotto};
+  if(editingId){
+    // in modifica le quantità si applicano come variazione (non come numero assoluto): così non si perde un carico o uno spostamento fatto nel frattempo
+    delete rec.qtaNegozio; delete rec.qtaMagazzino;
+    ['negozio','magazzino'].forEach(function(loc){
+      var dlt=newQ[loc]-formBase[loc];     // solo ciò che è stato cambiato in questa scheda: carichi e spostamenti fatti nel frattempo restano
+      if(!dlt) return;
+      rec[NOMEQ[loc]]=F.increment(dlt);
+      b.set(fdb.collection('movimenti').doc(),movDoc(logP,{tipo:'rettifica',luogo:loc,delta:dlt,qta:Math.abs(dlt),nota:'Modificata dalla scheda'},null));
+    });
+  } else {
+    ['magazzino','negozio'].forEach(function(loc){
+      if(newQ[loc]>0) b.set(fdb.collection('movimenti').doc(),movDoc(logP,{tipo:'carico',da:'esterno',a:loc,qta:newQ[loc],nota:'Carico iniziale (nuovo articolo)'},null));
+    });
+  }
   if(photo.full) rec.miniatura=photo.thumb; else if(photo.remove) rec.miniatura='';
   b.set(ref,rec,{merge:true});
   var fref=fdb.doc('foto/'+ref.id);
   if(photo.full) b.set(fref,{img:photo.full}); else if(photo.remove) b.delete(fref);
   var cref=fdb.doc('prodotti/'+ref.id+'/privato/costo');
   if(pa!=null) b.set(cref,{prezzoAcquisto:pa}); else if(editingId) b.delete(cref);
-  b.commit().then(function(){ sv.disabled=false; $('#formOv').classList.remove('show'); toast(editingId?'Prodotto aggiornato.':'Prodotto aggiunto.'); })
+  var wasEdit=!!editingId;
+  commitFast(b).then(function(r){ sv.disabled=false; $('#formOv').classList.remove('show'); toast(r.queued?QUEUED_MSG:(wasEdit?'Prodotto aggiornato.':'Prodotto aggiunto.')); })
     .catch(function(er){ sv.disabled=false; console.warn(er.code); err.textContent = er.code==='permission-denied' ? 'Permesso negato dalle regole del database.' : 'Salvataggio non riuscito. Controlla la connessione.'; });
 });
 
@@ -1162,6 +1254,7 @@ $('#mvGo').onclick=function(){
   if(role==='titolare') doMove(); else askPin(mv.who,doMove);
 };
 function doMove(){
+  if(!isOnline()){ $('#mvErr').textContent='Senza rete non si può spostare merce: il controllo delle quantità richiede il collegamento. Riprova quando il segnale torna.'; return; }
   var p=mv.prod, n=mv.qty|0, from=mv.dir==='mn'?'magazzino':'negozio', to=mv.dir==='mn'?'negozio':'magazzino';
   var fFrom='qta'+from.charAt(0).toUpperCase()+from.slice(1), fTo='qta'+to.charAt(0).toUpperCase()+to.slice(1);
   var F=firebase.firestore.FieldValue, pref=fdb.doc('prodotti/'+p.id), mref=fdb.collection('movimenti').doc();
@@ -1191,6 +1284,84 @@ function doMove(){
     if(mv) renderMove();
   });
 }
+
+
+/* ── Storico dell'articolo: carichi, rettifiche e spostamenti (registro movimenti, per articolo) ── */
+var NOMEQ={magazzino:'qtaMagazzino',negozio:'qtaNegozio'}, LUOGO={magazzino:'Magazzino',negozio:'Negozio'};
+function movDoc(p,o,who){
+  var d={prodottoId:p.id,prodottoNome:p.nome,codice:p.codiceProdotto||'',staffId:who?who.id:'titolare',staffNome:who?who.nome:'Titolare',ruolo:'titolare',quando:firebase.firestore.FieldValue.serverTimestamp(), quandoLocale:firebase.firestore.Timestamp.fromDate(new Date())};
+  Object.keys(o).forEach(function(k){ d[k]=o[k]; });
+  return d;
+}
+function movKind(r){ return r.tipo==='carico'||r.tipo==='rettifica' ? r.tipo : 'sposta'; }
+// descrive una riga del registro: testo, quantità col segno, colore
+function movText(r){
+  var k=movKind(r);
+  if(k==='carico') return {kind:k, txt:'Carico · arrivati in '+LUOGO[r.a], q:'+'+(r.qta|0), cls:'up'};
+  if(k==='rettifica') return {kind:k, txt:'Correzione della quantità in '+LUOGO[r.luogo], q:((r.delta|0)>0?'+':'−')+(r.qta|0), cls:(r.delta|0)>0?'up':'down'};
+  return {kind:k, txt:(r.da==='magazzino'?'Magazzino → Negozio':'Negozio → Magazzino'), q:String(r.qta|0), cls:''};
+}
+// Cosa va rifatto, al contrario, per annullare una riga: campo → variazione
+function undoDeltas(r){
+  var k=movKind(r), o={};
+  if(k==='carico') o[NOMEQ[r.a]]=-(r.qta|0);
+  else if(k==='rettifica') o[NOMEQ[r.luogo]]=-(r.delta|0);
+  else { o[r.a==='negozio'?'qtaNegozio':'qtaMagazzino']=-(r.qta|0); o[r.da==='negozio'?'qtaNegozio':'qtaMagazzino']=(r.qta|0); }
+  return o;
+}
+function whenText(d){ return d ? d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '…'; }
+var histOpen=false;
+function renderProdHistory(id,rows){
+  var p=byId[id]; if(viewingId!==id || !p) return;
+  var items=rows.map(function(r){ var t=movText(r); return {when:tsDate(r.quandoLocale||r.quando), txt:t.txt, q:t.q, cls:t.cls, who:r.staffNome||'', nota:r.nota||''}; })
+    .sort(function(a,b){ return (b.when?b.when.getTime():Infinity)-(a.when?a.when.getTime():Infinity); });
+  var c=tsDate(p.creatoIl);
+  items.push({when:c, txt:'Inserito nel sistema', q:'', cls:'', who:'', nota:c?'':'(data non disponibile)'});
+  var shown=histOpen?items:items.slice(0,6);
+  $('#histMov').innerHTML='<div class="sec-own"><div class="tag-own" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--gold)">Storia dell\'articolo (solo titolare)</div>'
+    +shown.map(function(i){ return '<div class="hrow"><div class="hw">'+esc(i.when?i.when.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+i.when.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'')+'</div><div>'+esc(i.txt)+'</div><div class="hq '+i.cls+'">'+esc(i.q)+'</div><div class="hs">'+esc([i.who,i.nota].filter(Boolean).join(' · '))+'</div></div>'; }).join('')
+    +(items.length>6?'<button type="button" class="btn" id="histMore" style="margin-top:8px;padding:8px 14px;font-size:13px">'+(histOpen?'Mostra meno':'Mostra tutto ('+items.length+')')+'</button>':'')+'</div>';
+  var m=$('#histMore'); if(m) m.onclick=function(){ histOpen=!histOpen; renderProdHistory(id,rows); };
+}
+function loadProdHistory(id){
+  fdb.collection('movimenti').where('prodottoId','==',id).get().then(function(snap){
+    renderProdHistory(id,snap.docs.map(function(d){ return d.data({serverTimestamps:'estimate'}); }));
+  }).catch(function(er){ console.warn('storia articolo:',er&&er.code); });
+}
+
+/* ── Carico: pezzi acquistati ── */
+var car=null;
+function openCarico(p){
+  car={prod:p,qty:1,dest:'magazzino',who:null};
+  var w=whoChoices(); car.who=w[0]||null;
+  $('#carInfo').innerHTML='<b>'+esc(p.nome)+'</b><br><span style="color:var(--espresso-2)">Ora: '+(p.qtaMagazzino|0)+' in magazzino · '+(p.qtaNegozio|0)+' in negozio</span>';
+  $('#carQty').value='1'; $('#carNota').value=''; $('#carErr').textContent='';
+  Array.prototype.forEach.call(document.querySelectorAll('#carDest button'),function(b){ b.classList.toggle('on',b.dataset.d==='magazzino'); });
+  $('#carWho').innerHTML=w.map(function(s){ return '<button type="button" class="chip'+(car.who&&car.who.id===s.id?' on':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('');
+  updCar(); $('#carOv').classList.add('show');
+}
+function updCar(){ var n=car.qty|0; $('#carGo').disabled=!(n>=1&&n<=100000&&car.who); $('#carGo').textContent='Aggiungi '+(n>=1?n+(n===1?' pezzo':' pezzi'):'')+' in '+LUOGO[car.dest].toLowerCase(); }
+$('#carMinus').onclick=function(){ if(car.qty>1){ car.qty--; $('#carQty').value=car.qty; updCar(); } };
+$('#carPlus').onclick=function(){ if(car.qty<100000){ car.qty++; $('#carQty').value=car.qty; updCar(); } };
+$('#carQty').addEventListener('input',function(){ var n=parseInt(this.value,10); car.qty=isFinite(n)?Math.max(0,Math.min(n,100000)):0; updCar(); });
+$('#carQty').addEventListener('blur',function(){ if(car.qty<1) car.qty=1; this.value=car.qty; updCar(); });
+$('#carDest').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; car.dest=b.dataset.d; Array.prototype.forEach.call(document.querySelectorAll('#carDest button'),function(x){ x.classList.toggle('on',x===b); }); updCar(); });
+$('#carWho').addEventListener('click',function(e){ var b=e.target.closest('.chip'); if(!b) return; car.who=whoChoices().filter(function(s){ return s.id===b.dataset.id; })[0]||null; Array.prototype.forEach.call(document.querySelectorAll('#carWho .chip'),function(x){ x.classList.toggle('on',x===b); }); updCar(); });
+$('#carCancel').onclick=function(){ $('#carOv').classList.remove('show'); car=null; };
+$('#carOv').addEventListener('click',function(e){ if(e.target===this && !$('#carGo').dataset.busy){ this.classList.remove('show'); car=null; } });
+$('#carGo').onclick=function(){
+  if(!car||!car.who) return;
+  var p=car.prod, n=car.qty|0, dest=car.dest, F=firebase.firestore.FieldValue, b=fdb.batch(), go=$('#carGo');
+  var upd={aggiornatoIl:F.serverTimestamp()}; upd[NOMEQ[dest]]=F.increment(n);
+  b.update(fdb.doc('prodotti/'+p.id),upd);
+  b.set(fdb.collection('movimenti').doc(),movDoc(p,{tipo:'carico',da:'esterno',a:dest,qta:n,nota:$('#carNota').value.trim().slice(0,120)},car.who));
+  go.disabled=true; go.dataset.busy='1'; $('#carErr').textContent='';
+  commitFast(b).then(function(r){
+    delete go.dataset.busy; $('#carOv').classList.remove('show'); car=null; toast(r.queued?QUEUED_MSG:'Aggiunti '+n+(n===1?' pezzo':' pezzi')+' in '+LUOGO[dest].toLowerCase()+' — registrato nella storia dell\'articolo.');
+    if(viewingId===p.id){ openView(p.id); }
+  }).catch(function(er){ delete go.dataset.busy; go.disabled=false; console.warn('carico:',er&&er.code);
+    $('#carErr').textContent = er&&er.code==='permission-denied' ? 'Il database non permette ancora i carichi: pubblica le regole aggiornate (firestore.rules) e riprova.' : 'Non salvato: manca la connessione. Riprova.'; });
+};
 
 /* ── Tastierino PIN ── */
 var pinBuf='', pinWho=null, pinDone=null;
@@ -1246,12 +1417,13 @@ $('#logQ').addEventListener('input',renderLog);
 function tsDate(t){ return t && t.toDate ? t.toDate() : (t instanceof Date ? t : null); }
 function renderLog(){
   var q=norm($('#logQ').value);
-  var rows=logRows.filter(function(r){ return !q || norm(r.prodottoNome+' '+r.staffNome+' '+(r.codice||'')).indexOf(q)>=0; });
+  var rows=logRows.filter(function(r){ return !q || norm(r.prodottoNome+' '+r.staffNome+' '+(r.codice||'')+' '+(r.nota||'')+' '+movText(r).txt).indexOf(q)>=0; });
   $('#logList').innerHTML = rows.length ? rows.map(function(r){
-    var d=tsDate(r.quando);
+    var d=tsDate(r.quandoLocale||r.quando);
     var when=d ? d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'})+'<br>'+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '…';
-    return '<div class="logrow"><div class="when">'+when+'</div><div class="what">'+esc(r.prodottoNome)+'</div><div class="q2">'+(r.qta|0)+'</div><div class="who2">'+esc(r.staffNome)+' · '+(r.da==='magazzino'?'Magazzino → Negozio':'Negozio → Magazzino')+'<button type="button" class="logdel" data-id="'+esc(r.id)+'" title="Elimina questo spostamento">elimina</button></div></div>';
-  }).join('') : '<div class="empty">'+(logRows.length?'Nessun risultato.':'Nessuno spostamento registrato.')+'</div>';
+    var t=movText(r);
+    return '<div class="logrow"><div class="when">'+when+'</div><div class="what">'+esc(r.prodottoNome)+'</div><div class="q2 '+t.cls+'">'+t.q+'</div><div class="who2">'+esc(r.staffNome)+' · '+esc(t.txt)+(r.nota?' · '+esc(r.nota):'')+'<button type="button" class="logdel" data-id="'+esc(r.id)+'" title="Elimina questa riga">elimina</button></div></div>';
+  }).join('') : '<div class="empty">'+(logRows.length?'Nessun risultato.':'Nessun movimento registrato.')+'</div>';
 }
 
 /* ── Elimina uno spostamento dal registro (solo titolare) ── */
@@ -1260,16 +1432,26 @@ $('#logList').addEventListener('click',function(e){
   var b=e.target.closest('.logdel'); if(!b) return;
   var r=logRows.filter(function(x){ return x.id===b.dataset.id; })[0]; if(r) openDel(r);
 });
+function undoCheck(r,p){
+  // si può annullare solo se nessuna quantità scende sotto zero
+  var dl=undoDeltas(r), bad=null;
+  Object.keys(dl).forEach(function(f){ if(p && ((p[f]|0)+dl[f])<0) bad={field:f,have:p[f]|0,need:-dl[f]}; });
+  return bad;
+}
 function openDel(r){
   delRow=r; $('#delErr').textContent='';
-  var p=byId[r.prodottoId], d=tsDate(r.quando);
-  var when=d?d.toLocaleDateString('it-IT')+' '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'';
-  var dir=r.da==='magazzino'?'Magazzino → Negozio':'Negozio → Magazzino';
-  var cameDa=r.da==='magazzino'?'Magazzino':'Negozio', sitsIn=r.a==='negozio'?'Negozio':'Magazzino';
-  var avail=p?((r.a==='negozio'?p.qtaNegozio:p.qtaMagazzino)|0):0, can=!!p && avail>=(r.qta|0);
-  $('#delInfo').innerHTML='<b>'+esc(r.prodottoNome)+'</b><br>'+(r.qta|0)+' pezzi · '+dir+'<br><span style="color:var(--espresso-2)">'+esc(r.staffNome)+' · '+esc(when)+'</span>'
-    +(can?'':'<div class="repwarn" style="margin-top:8px">'+(p?'Non si può annullare lo spostamento: in '+sitsIn+' ci sono ora solo '+avail+' pezzi (ne servono '+(r.qta|0)+').':'L\'articolo non esiste più.')+' Puoi comunque eliminare la riga dal registro.</div>');
-  var u=$('#delUndo'); u.textContent='Elimina e annulla lo spostamento (rimette '+(r.qta|0)+' pezzi in '+cameDa+')'; u.disabled=!can;
+  var p=byId[r.prodottoId], d=tsDate(r.quandoLocale||r.quando), t=movText(r), k=t.kind;
+  var bad=p?undoCheck(r,p):null, can=!!p && !bad;
+  var what=k==='carico'?'Carico di '+(r.qta|0)+' pezzi in '+LUOGO[r.a]:k==='rettifica'?'Correzione '+t.q+' in '+LUOGO[r.luogo]:(r.qta|0)+' pezzi · '+t.txt;
+  $('#delTitle').textContent = k==='sposta' ? 'Eliminare questo spostamento?' : k==='carico' ? 'Eliminare questo carico?' : 'Eliminare questa correzione?';
+  $('#delInfo').innerHTML='<b>'+esc(r.prodottoNome)+'</b><br>'+esc(what)+'<br><span style="color:var(--espresso-2)">'+esc(r.staffNome)+' · '+esc(whenText(d))+(r.nota?' · '+esc(r.nota):'')+'</span>'
+    +(can?'':'<div class="repwarn" style="margin-top:8px">'+(p?'Non si può annullare: in '+LUOGO[bad.field==='qtaNegozio'?'negozio':'magazzino']+' ci sono ora solo '+bad.have+' pezzi (ne servono '+bad.need+').':'L\'articolo non esiste più.')+' Puoi comunque eliminare la riga dal registro.</div>');
+  var u=$('#delUndo');
+  u.textContent = k==='sposta' ? 'Elimina e annulla lo spostamento (rimette '+(r.qta|0)+' pezzi in '+(r.da==='magazzino'?'Magazzino':'Negozio')+')'
+                : k==='carico' ? 'Elimina e annulla il carico (toglie '+(r.qta|0)+' pezzi da '+LUOGO[r.a]+')'
+                : 'Elimina e annulla la correzione (rimette la quantità com\'era)';
+  u.disabled=!can;
+  $('#delOnly').textContent = k==='sposta' ? 'Elimina solo dal registro (le quantità restano come sono)' : 'Elimina solo la riga (le quantità restano come sono)';
   $('#delOnly').disabled=false; $('#delCancel').disabled=false;
   $('#delOv').classList.add('show');
 }
@@ -1281,28 +1463,30 @@ function delFail(er){
         : er&&er.code==='no-product' ? 'L\'articolo non esiste più. Puoi eliminare solo la riga.'
         : 'Operazione non riuscita. Controlla la connessione e riprova.';
   $('#delErr').textContent=m; $('#delOnly').disabled=false; $('#delCancel').disabled=false;
-  var p=delRow&&byId[delRow.prodottoId]; $('#delUndo').disabled=!(p && ((delRow.a==='negozio'?p.qtaNegozio:p.qtaMagazzino)|0)>=(delRow.qta|0)) || (er&&(er.code==='not-enough'||er.code==='no-product'));
+  var p=delRow&&byId[delRow.prodottoId]; $('#delUndo').disabled=!(p && !undoCheck(delRow,p)) || (er&&(er.code==='not-enough'||er.code==='no-product'));
 }
 function delDone(msg){ $('#delOv').classList.remove('show'); delRow=null; toast(msg); }
 $('#delCancel').onclick=function(){ $('#delOv').classList.remove('show'); delRow=null; };
 $('#delOv').addEventListener('click',function(e){ if(e.target===this && !$('#delCancel').disabled){ this.classList.remove('show'); delRow=null; } });
 $('#delOnly').onclick=function(){
-  var r=delRow; if(!r) return; delBusy(true);
-  fdb.doc('movimenti/'+r.id).delete().then(function(){ delDone('Spostamento eliminato dal registro.'); }).catch(delFail);
+  var r=delRow; if(!r) return;
+  if(!isOnline()){ $('#delErr').textContent='Servono la rete per eliminare dal registro.'; return; }
+  delBusy(true);
+  fdb.doc('movimenti/'+r.id).delete().then(function(){ delDone('Riga eliminata dal registro.'); }).catch(delFail);
 };
 $('#delUndo').onclick=function(){
-  var r=delRow; if(!r) return; delBusy(true);
-  var pref=fdb.doc('prodotti/'+r.prodottoId), mref=fdb.doc('movimenti/'+r.id), F=firebase.firestore.FieldValue;
-  var fTo=r.a==='negozio'?'qtaNegozio':'qtaMagazzino', fBack=r.da==='negozio'?'qtaNegozio':'qtaMagazzino', q=r.qta|0;
+  var r=delRow; if(!r) return;
+  if(!isOnline()){ $('#delErr').textContent='Servono la rete per annullare: le quantità vanno ricontrollate nel database.'; return; }
+  delBusy(true);
+  var pref=fdb.doc('prodotti/'+r.prodottoId), mref=fdb.doc('movimenti/'+r.id), F=firebase.firestore.FieldValue, dl=undoDeltas(r), k=movKind(r);
   fdb.runTransaction(function(tx){
     return tx.get(pref).then(function(snap){
       if(!snap.exists) throw {code:'no-product'};
-      var d=snap.data(), cur=d[fTo]|0;
-      if(cur<q) throw {code:'not-enough'};
-      var upd={aggiornatoIl:F.serverTimestamp()}; upd[fTo]=cur-q; upd[fBack]=(d[fBack]|0)+q;
+      var d=snap.data(), upd={aggiornatoIl:F.serverTimestamp()};
+      Object.keys(dl).forEach(function(f){ var nv=(d[f]|0)+dl[f]; if(nv<0) throw {code:'not-enough'}; upd[f]=nv; });
       tx.update(pref,upd); tx.delete(mref);
     });
-  }).then(function(){ delDone('Spostamento annullato: '+q+' pezzi rimessi in '+(r.da==='magazzino'?'magazzino':'negozio')+'.'); }).catch(delFail);
+  }).then(function(){ delDone(k==='sposta'?'Spostamento annullato: '+(r.qta|0)+' pezzi rimessi in '+(r.da==='magazzino'?'magazzino':'negozio')+'.':k==='carico'?'Carico annullato: tolti '+(r.qta|0)+' pezzi da '+LUOGO[r.a].toLowerCase()+'.':'Correzione annullata: quantità rimessa com\'era.'); }).catch(delFail);
 };
 
 /* chiudi i fogli toccando lo sfondo */
@@ -1605,10 +1789,10 @@ $('#repOv').addEventListener('click',function(e){ if(e.target===this) this.class
 
 
 /* ── Elenco articoli (titolare): ogni articolo, con filtri per distributore, categoria e date ── */
-var itm={costs:{},moved:{},sort:'nome',dir:1,rows:[],ready:false};
+var itm={costs:{},moved:{},carico:{},sort:'nome',dir:1,rows:[],ready:false};
 function dayOf(d){ return d ? isoDay(d) : ''; }
 function itDay(d){ return d ? d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'; }
-function itemDates(p){ return {creato:tsDate(p.creatoIl), mod:tsDate(p.aggiornatoIl), mov:itm.moved[p.id]||null}; }
+function itemDates(p){ return {creato:tsDate(p.creatoIl), mod:tsDate(p.aggiornatoIl), mov:itm.moved[p.id]||null, car:itm.carico[p.id]||null}; }
 function openItems(){
   $('#itemsOv').classList.add('show'); itm.ready=false; $('#itBody').innerHTML='<div class="none">Caricamento…</div>';
   var dsel=$('#itDist'), csel=$('#itCat'), dv=dsel.value, cv=csel.value;
@@ -1617,12 +1801,16 @@ function openItems(){
   csel.innerHTML='<option value="">Tutte</option>'+cats.map(function(c){ return '<option value="'+esc(c)+'">'+esc(c)+'</option>'; }).join('')+'<option value="_none">(senza categoria)</option>';
   dsel.value=dv||''; csel.value=cv||''; if(dsel.value!==(dv||'')) dsel.value=''; if(csel.value!==(cv||'')) csel.value='';
   Promise.all([loadCosts(),fdb.collection('movimenti').get()]).then(function(r){
-    itm.costs=r[0]; itm.moved={};
-    r[1].docs.forEach(function(d){ var o=d.data({serverTimestamps:'estimate'}), t=tsDate(o.quando); if(!t||!o.prodottoId) return; if(!itm.moved[o.prodottoId]||t>itm.moved[o.prodottoId]) itm.moved[o.prodottoId]=t; });
+    itm.costs=r[0]; itm.moved={}; itm.carico={};
+    r[1].docs.forEach(function(d){
+      var o=d.data({serverTimestamps:'estimate'}), t=tsDate(o.quando); if(!t||!o.prodottoId) return;
+      var k=movKind(o), m=k==='carico'?itm.carico:k==='sposta'?itm.moved:null;      // le correzioni non contano né come carico né come spostamento
+      if(m && (!m[o.prodottoId]||t>m[o.prodottoId])) m[o.prodottoId]=t;
+    });
     itm.ready=true; renderItems();
   }).catch(function(er){ console.warn('elenco:',er&&er.code); $('#itBody').innerHTML='<div class="none">Impossibile caricare i dati. Controlla la connessione e le regole del database.</div>'; });
 }
-var IT_COLS=[['nome','Articolo',0],['dist','Distributore',0],['cat','Categoria',0],['neg','Negozio',1],['mag','Magazzino',1],['prezzo','Prezzo',1],['valore','Valore a costo',1],['creato','Inserito',0],['mod','Modificato',0],['mov','Ultimo spostamento',0]];
+var IT_COLS=[['nome','Articolo',0],['dist','Distributore',0],['cat','Categoria',0],['neg','Negozio',1],['mag','Magazzino',1],['prezzo','Prezzo',1],['valore','Valore a costo',1],['creato','Inserito',0],['car','Ultimo carico',0],['mod','Modificato',0],['mov','Ultimo spostamento',0]];
 function itemVal(p,k){
   var dt=itemDates(p);
   switch(k){
@@ -1669,7 +1857,7 @@ function renderItems(){
       var dt=itemDates(p), v=itemVal(p,'valore'), codes=[p.codiceProdotto,p.codiceRivenditore,p.codiceCustom,p.barcode].filter(Boolean).join(' · ');
       return '<tr><td><div class="nm">'+esc(p.nome)+(p.daRicontare?' ⚠':'')+'</div>'+(codes?'<div class="cd">'+esc(codes)+'</div>':'')+'</td><td>'+esc(distName(p)||'—')+'</td><td>'+esc(p.categoria||'—')+'</td>'
         +'<td class="n">'+fmtN(p.qtaNegozio|0)+'</td><td class="n">'+fmtN(p.qtaMagazzino|0)+'</td><td class="n">'+eur.format(p.prezzoVendita||0)+'</td><td class="n">'+(v===null?'—':eur.format(v))+'</td>'
-        +'<td>'+itDay(dt.creato)+'</td><td>'+itDay(dt.mod)+'</td><td>'+itDay(dt.mov)+'</td></tr>';
+        +'<td>'+itDay(dt.creato)+'</td><td>'+itDay(dt.car)+'</td><td>'+itDay(dt.mod)+'</td><td>'+itDay(dt.mov)+'</td></tr>';
     }).join('')+'</tbody></table>';
 }
 $('#repItems').onclick=openItems;
@@ -1678,17 +1866,17 @@ $('#itClose').onclick=function(){ $('#itemsOv').classList.remove('show'); };
 $('#itReset').onclick=function(){ ['itQ','itDist','itCat','itStock','itFrom','itTo'].forEach(function(id){ $('#'+id).value=''; }); $('#itDateKind').value='creato'; renderItems(); };
 $('#itBody').addEventListener('click',function(e){
   var th=e.target.closest('th[data-k]'); if(!th) return;
-  var k=th.dataset.k; if(itm.sort===k) itm.dir=-itm.dir; else { itm.sort=k; itm.dir=(k==='creato'||k==='mod'||k==='mov')?-1:1; }
+  var k=th.dataset.k; if(itm.sort===k) itm.dir=-itm.dir; else { itm.sort=k; itm.dir=(k==='creato'||k==='car'||k==='mod'||k==='mov')?-1:1; }
   renderItems();
 });
 $('#itPrint').onclick=function(){ document.body.classList.add('printing-items'); setTimeout(function(){ window.print(); },50); };
 $('#itCsv').onclick=function(){
-  var cols=['codice','nome','categoria','distributore','negozio','magazzino','totale','prezzo_acquisto','prezzo_vendita','valore_a_costo','inserito','modificato','ultimo_spostamento'];
+  var cols=['codice','nome','categoria','distributore','negozio','magazzino','totale','prezzo_acquisto','prezzo_vendita','valore_a_costo','inserito','ultimo_carico','modificato','ultimo_spostamento'];
   function cell(v){ v=v==null?'':String(v); if(/^[=+\-@]/.test(v)) v="'"+v; return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
   function dec(n){ return n==null?'':(Math.round(n*100)/100).toFixed(2).replace('.',','); }
   var lines=[cols.join(';')].concat(itm.rows.map(function(p){
     var dt=itemDates(p), tot=(p.qtaNegozio|0)+(p.qtaMagazzino|0), c=(p.id in itm.costs)?itm.costs[p.id]:null, v=itemVal(p,'valore');
-    return [p.codiceCustom||p.codiceProdotto||'',p.nome,p.categoria||'',distName(p),p.qtaNegozio|0,p.qtaMagazzino|0,tot,dec(c),dec(p.prezzoVendita||0),v===null?'':dec(v),dayOf(dt.creato),dayOf(dt.mod),dayOf(dt.mov)].map(cell).join(';');
+    return [p.codiceCustom||p.codiceProdotto||'',p.nome,p.categoria||'',distName(p),p.qtaNegozio|0,p.qtaMagazzino|0,tot,dec(c),dec(p.prezzoVendita||0),v===null?'':dec(v),dayOf(dt.creato),dayOf(dt.car),dayOf(dt.mod),dayOf(dt.mov)].map(cell).join(';');
   }));
   var blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}), url=URL.createObjectURL(blob), a=document.createElement('a');
   a.href=url; a.download='elenco-articoli-'+isoDay(new Date())+'.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); },1000);
@@ -1779,6 +1967,7 @@ $('#ftCam').addEventListener('change',function(){ addFtFiles(this.files); this.v
 $('#ftPick').addEventListener('change',function(){ addFtFiles(this.files); this.value=''; });
 $('#ftSave').onclick=function(){
   if(fat.busy||!fat.files.length) return;
+  if(!isOnline()){ $('#ftErr').textContent='Le fatture si caricano solo con la rete (i file sono grandi). Tieni le foto e salvale quando torna il segnale.'; return; }
   var data=$('#ftData').value; if(!data){ $('#ftErr').textContent='Scegli la data della fattura.'; return; }
   var distId=$('#ftDist').value, dn=distId&&distById[distId]?distById[distId].nome:'', nota=$('#ftNota').value.trim();
   fat.busy=true; $('#ftSave').disabled=true; $('#ftSave').textContent='Caricamento…'; $('#ftErr').textContent='';
