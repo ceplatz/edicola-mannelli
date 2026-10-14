@@ -89,7 +89,16 @@ header{display:flex;align-items:center;gap:14px;padding:10px 20px;background:var
 .who{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border:1.5px solid var(--line);border-radius:999px;background:var(--sand-2);font-size:13px;font-weight:700}
 .who .role{color:var(--gold);letter-spacing:.08em;text-transform:uppercase;font-size:11px}
 .who button{border:none;background:var(--espresso);color:var(--sand-3);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px}
-@media(max-width:640px){.locale{display:none}.clock{display:none}header{padding:8px 12px}.brand img{height:44px}}
+/* indicatore di sincronizzazione (come nel POS Verdi): verde che pulsa piano = tutto salvato nel database; rosso = senza rete, si salva sul dispositivo */
+.sync{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border:1.5px solid var(--line);border-radius:999px;background:var(--sand-2);font-size:12px;font-weight:700;color:var(--espresso);cursor:pointer;white-space:nowrap}
+.sync i{width:10px;height:10px;border-radius:50%;background:#2f9e5f;flex-shrink:0}
+.sync.ok i{animation:syncpulse 3.4s ease-in-out infinite}
+.sync.wait i{background:#d98e04;animation:syncpulse 1.2s ease-in-out infinite}
+.sync.bad{border-color:#e3b4b4;background:#fdf0f0;color:#a33}
+.sync.bad i{background:#c0392b}
+@keyframes syncpulse{0%,100%{box-shadow:0 0 0 0 rgba(47,158,95,.55);opacity:1}50%{box-shadow:0 0 0 6px rgba(47,158,95,0);opacity:.55}}
+@media (prefers-reduced-motion:reduce){.sync i{animation:none !important}}
+@media(max-width:640px){.sync{padding:6px 9px;font-size:11px}.locale{display:none}.clock{display:none}header{padding:8px 12px}.brand img{height:44px}}
 
 main{width:100%;max-width:1000px;margin:0 auto;padding:18px 20px 40px}
 .searchbar{display:flex;align-items:center;gap:10px;background:var(--sand-3);border:1.5px solid var(--line);border-radius:16px;padding:6px 8px 6px 16px;box-shadow:var(--shadow);position:relative;z-index:5}
@@ -362,6 +371,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
     <div class="brand"><img src="logo.png" alt="Edicola Mannelli"></div>
     <div class="locale">Duomo</div>
     <div class="header-right">
+      <button type="button" class="sync ok" id="syncPill" aria-live="polite"><i></i><span id="syncTxt">Sincronizzato</span></button>
       <div class="clock"><div class="t" id="clockT">--:--</div><div class="d" id="clockD"></div></div>
       <div class="who"><span id="whoRole" class="role"></span><button id="logoutBtn" title="Esci" aria-label="Esci">⎋</button></div>
     </div>
@@ -678,6 +688,43 @@ function fbInit(){
   return true;
 }
 
+/* ── Sincronizzazione: il dispositivo salva da solo e invia tutto appena torna la rete ── */
+var net={online:(typeof navigator==='undefined'||navigator.onLine!==false), cacheOnly:false, pending:false, pendDocs:0, t0:Date.now()}, pendGen=0;
+function isOnline(){ return net.online && !(net.cacheOnly && Date.now()-net.t0>6000); }
+function syncUpdate(){
+  var el=$('#syncPill'), tx=$('#syncTxt'); if(!el) return;
+  var off=!isOnline(), waiting=net.pending||net.pendDocs>0, cls, txt;
+  if(off){ cls='bad'; txt = waiting ? 'Offline · modifiche salvate qui' : 'Offline'; }
+  else if(waiting){ cls='wait'; txt='Sincronizzo…'; }
+  else { cls='ok'; txt='Sincronizzato'; }
+  el.className='sync '+cls; tx.textContent=txt;
+}
+// Quante scritture aspettano di partire: Firestore lo sa anche dopo che l'app è stata chiusa e riaperta
+function checkPending(){
+  if(!fdb) return; var g=++pendGen; net.pending=true; syncUpdate();
+  fdb.waitForPendingWrites().then(function(){ if(g===pendGen){ net.pending=false; syncUpdate(); } }).catch(function(){ if(g===pendGen){ net.pending=false; syncUpdate(); } });
+}
+function trackWrite(p){ checkPending(); p.then(checkPending,checkPending); }
+window.addEventListener('online',function(){ net.online=true; net.t0=Date.now(); syncUpdate(); checkPending(); });
+window.addEventListener('offline',function(){ net.online=false; syncUpdate(); });
+setInterval(syncUpdate,3000);
+$('#syncPill').addEventListener('click',function(){
+  toast(!isOnline() ? 'Senza rete: quello che salvi resta su questo dispositivo e parte da solo appena torna il segnale. Anche se chiudi l\'app, non va perso: si invia alla prossima apertura con la rete.'
+       : (net.pending||net.pendDocs>0) ? 'Sto inviando al database le modifiche fatte senza rete…' : 'Tutto è salvato nel database.');
+});
+// Salva e attende la conferma del database per un attimo; se manca la rete la modifica resta in coda sul dispositivo e si prosegue subito.
+function commitFast(b){
+  return new Promise(function(resolve,reject){
+    var settled=false, pr=b.commit(); trackWrite(pr);
+    var t=setTimeout(function(){ if(!settled){ settled=true; resolve({queued:true}); } }, isOnline()?2500:0);
+    pr.then(function(){ if(!settled){ settled=true; clearTimeout(t); resolve({queued:false}); } },
+            function(er){ console.warn('scrittura rifiutata:',er&&er.code); if(!settled){ settled=true; clearTimeout(t); reject(er); } else syncProblem(er); });
+  });
+}
+function syncProblem(er){ toast('Il database ha rifiutato una modifica fatta senza rete ('+((er&&er.code)||'errore')+'). Controlla l\'articolo e rifai la modifica.'); }
+var QUEUED_MSG='Salvato su questo dispositivo — si invia da solo appena torna la rete.';
+if('serviceWorker' in navigator && location.protocol!=='file:') window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(e){ console.warn('sw:',e&&e.message); }); });
+
 /* ── Login ── */
 var ownerMode=false;
 $('#ownerToggle').addEventListener('click',function(e){
@@ -714,7 +761,7 @@ function onUser(user){
   $('#whoRole').textContent = role==='titolare' ? 'Titolare' : 'Personale';
   $('#loginOverlay').classList.add('hidden'); $('#app').classList.remove('hidden');
   $('#loginBtn').disabled=false; $('#loginBtn').textContent='Entra';
-  buildTiles(); startDistributori(); startProducts(); startStaff();
+  buildTiles(); startDistributori(); startProducts(); startStaff(); checkPending();
 }
 
 /* ── Home: tessere ── */
@@ -740,7 +787,8 @@ function buildTiles(){
 /* ── Prodotti + ricerca ── */
 function startProducts(){
   if(unsub) unsub();
-  unsub = fdb.collection('prodotti').onSnapshot(function(snap){
+  unsub = fdb.collection('prodotti').onSnapshot({includeMetadataChanges:true}, function(snap){
+    net.cacheOnly=!!(snap.metadata&&snap.metadata.fromCache); net.pendDocs=snap.docs.filter(function(d){ return d.metadata&&d.metadata.hasPendingWrites; }).length; syncUpdate();
     products = snap.docs.map(function(d){ var o=d.data(); o.id=d.id; return o; });
     byId={}; products.forEach(function(p){ byId[p.id]=p; });
     fillCatSelects();
@@ -925,7 +973,7 @@ $('#scanForm').onclick=function(){ scan().then(function(c){ if(c) pf.barcode.val
 $('#delBtn').onclick=function(){
   var p=byId[editingId]; if(!p || !confirm('Eliminare «'+p.nome+'»? L\'operazione non si può annullare.')) return;
   var b=fdb.batch(); b.delete(fdb.doc('prodotti/'+editingId+'/privato/costo')); b.delete(fdb.doc('foto/'+editingId)); b.delete(fdb.doc('prodotti/'+editingId));
-  b.commit().then(function(){ $('#formOv').classList.remove('show'); toast('Prodotto eliminato.'); }).catch(function(){ $('#ferr').textContent='Eliminazione non riuscita. Riprova.'; });
+  commitFast(b).then(function(r){ $('#formOv').classList.remove('show'); toast(r.queued?QUEUED_MSG:'Prodotto eliminato.'); }).catch(function(){ $('#ferr').textContent='Eliminazione non riuscita. Riprova.'; });
 };
 pf.addEventListener('submit',function(e){
   e.preventDefault();
@@ -948,7 +996,7 @@ pf.addEventListener('submit',function(e){
   if(dup){ err.textContent='Questo '+(dup.k==='barcode'?'codice a barre':'codice prodotto')+' è già usato da «'+dup.o.nome+'».'; return; }
   var sv=$('#formSave'); sv.disabled=true;
   var ref = editingId ? fdb.doc('prodotti/'+editingId) : fdb.collection('prodotti').doc();
-  if(!editingId) rec.creatoIl=firebase.firestore.FieldValue.serverTimestamp();
+  if(!editingId) rec.creatoIl=firebase.firestore.Timestamp.fromDate(new Date());
   var b=fdb.batch(), F=firebase.firestore.FieldValue, newQ={negozio:rec.qtaNegozio, magazzino:rec.qtaMagazzino}, logP={id:ref.id,nome:nome,codiceProdotto:rec.codiceProdotto};
   if(editingId){
     // in modifica le quantità si applicano come variazione (non come numero assoluto): così non si perde un carico o uno spostamento fatto nel frattempo
@@ -970,7 +1018,8 @@ pf.addEventListener('submit',function(e){
   if(photo.full) b.set(fref,{img:photo.full}); else if(photo.remove) b.delete(fref);
   var cref=fdb.doc('prodotti/'+ref.id+'/privato/costo');
   if(pa!=null) b.set(cref,{prezzoAcquisto:pa}); else if(editingId) b.delete(cref);
-  b.commit().then(function(){ sv.disabled=false; $('#formOv').classList.remove('show'); toast(editingId?'Prodotto aggiornato.':'Prodotto aggiunto.'); })
+  var wasEdit=!!editingId;
+  commitFast(b).then(function(r){ sv.disabled=false; $('#formOv').classList.remove('show'); toast(r.queued?QUEUED_MSG:(wasEdit?'Prodotto aggiornato.':'Prodotto aggiunto.')); })
     .catch(function(er){ sv.disabled=false; console.warn(er.code); err.textContent = er.code==='permission-denied' ? 'Permesso negato dalle regole del database.' : 'Salvataggio non riuscito. Controlla la connessione.'; });
 });
 
@@ -1205,6 +1254,7 @@ $('#mvGo').onclick=function(){
   if(role==='titolare') doMove(); else askPin(mv.who,doMove);
 };
 function doMove(){
+  if(!isOnline()){ $('#mvErr').textContent='Senza rete non si può spostare merce: il controllo delle quantità richiede il collegamento. Riprova quando il segnale torna.'; return; }
   var p=mv.prod, n=mv.qty|0, from=mv.dir==='mn'?'magazzino':'negozio', to=mv.dir==='mn'?'negozio':'magazzino';
   var fFrom='qta'+from.charAt(0).toUpperCase()+from.slice(1), fTo='qta'+to.charAt(0).toUpperCase()+to.slice(1);
   var F=firebase.firestore.FieldValue, pref=fdb.doc('prodotti/'+p.id), mref=fdb.collection('movimenti').doc();
@@ -1239,7 +1289,7 @@ function doMove(){
 /* ── Storico dell'articolo: carichi, rettifiche e spostamenti (registro movimenti, per articolo) ── */
 var NOMEQ={magazzino:'qtaMagazzino',negozio:'qtaNegozio'}, LUOGO={magazzino:'Magazzino',negozio:'Negozio'};
 function movDoc(p,o,who){
-  var d={prodottoId:p.id,prodottoNome:p.nome,codice:p.codiceProdotto||'',staffId:who?who.id:'titolare',staffNome:who?who.nome:'Titolare',ruolo:'titolare',quando:firebase.firestore.FieldValue.serverTimestamp()};
+  var d={prodottoId:p.id,prodottoNome:p.nome,codice:p.codiceProdotto||'',staffId:who?who.id:'titolare',staffNome:who?who.nome:'Titolare',ruolo:'titolare',quando:firebase.firestore.FieldValue.serverTimestamp(), quandoLocale:firebase.firestore.Timestamp.fromDate(new Date())};
   Object.keys(o).forEach(function(k){ d[k]=o[k]; });
   return d;
 }
@@ -1263,7 +1313,7 @@ function whenText(d){ return d ? d.toLocaleDateString('it-IT',{day:'2-digit',mon
 var histOpen=false;
 function renderProdHistory(id,rows){
   var p=byId[id]; if(viewingId!==id || !p) return;
-  var items=rows.map(function(r){ var t=movText(r); return {when:tsDate(r.quando), txt:t.txt, q:t.q, cls:t.cls, who:r.staffNome||'', nota:r.nota||''}; })
+  var items=rows.map(function(r){ var t=movText(r); return {when:tsDate(r.quandoLocale||r.quando), txt:t.txt, q:t.q, cls:t.cls, who:r.staffNome||'', nota:r.nota||''}; })
     .sort(function(a,b){ return (b.when?b.when.getTime():Infinity)-(a.when?a.when.getTime():Infinity); });
   var c=tsDate(p.creatoIl);
   items.push({when:c, txt:'Inserito nel sistema', q:'', cls:'', who:'', nota:c?'':'(data non disponibile)'});
@@ -1306,8 +1356,8 @@ $('#carGo').onclick=function(){
   b.update(fdb.doc('prodotti/'+p.id),upd);
   b.set(fdb.collection('movimenti').doc(),movDoc(p,{tipo:'carico',da:'esterno',a:dest,qta:n,nota:$('#carNota').value.trim().slice(0,120)},car.who));
   go.disabled=true; go.dataset.busy='1'; $('#carErr').textContent='';
-  b.commit().then(function(){
-    delete go.dataset.busy; $('#carOv').classList.remove('show'); car=null; toast('Aggiunti '+n+(n===1?' pezzo':' pezzi')+' in '+LUOGO[dest].toLowerCase()+' — registrato nella storia dell\'articolo.');
+  commitFast(b).then(function(r){
+    delete go.dataset.busy; $('#carOv').classList.remove('show'); car=null; toast(r.queued?QUEUED_MSG:'Aggiunti '+n+(n===1?' pezzo':' pezzi')+' in '+LUOGO[dest].toLowerCase()+' — registrato nella storia dell\'articolo.');
     if(viewingId===p.id){ openView(p.id); }
   }).catch(function(er){ delete go.dataset.busy; go.disabled=false; console.warn('carico:',er&&er.code);
     $('#carErr').textContent = er&&er.code==='permission-denied' ? 'Il database non permette ancora i carichi: pubblica le regole aggiornate (firestore.rules) e riprova.' : 'Non salvato: manca la connessione. Riprova.'; });
@@ -1369,7 +1419,7 @@ function renderLog(){
   var q=norm($('#logQ').value);
   var rows=logRows.filter(function(r){ return !q || norm(r.prodottoNome+' '+r.staffNome+' '+(r.codice||'')+' '+(r.nota||'')+' '+movText(r).txt).indexOf(q)>=0; });
   $('#logList').innerHTML = rows.length ? rows.map(function(r){
-    var d=tsDate(r.quando);
+    var d=tsDate(r.quandoLocale||r.quando);
     var when=d ? d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'})+'<br>'+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '…';
     var t=movText(r);
     return '<div class="logrow"><div class="when">'+when+'</div><div class="what">'+esc(r.prodottoNome)+'</div><div class="q2 '+t.cls+'">'+t.q+'</div><div class="who2">'+esc(r.staffNome)+' · '+esc(t.txt)+(r.nota?' · '+esc(r.nota):'')+'<button type="button" class="logdel" data-id="'+esc(r.id)+'" title="Elimina questa riga">elimina</button></div></div>';
@@ -1390,7 +1440,7 @@ function undoCheck(r,p){
 }
 function openDel(r){
   delRow=r; $('#delErr').textContent='';
-  var p=byId[r.prodottoId], d=tsDate(r.quando), t=movText(r), k=t.kind;
+  var p=byId[r.prodottoId], d=tsDate(r.quandoLocale||r.quando), t=movText(r), k=t.kind;
   var bad=p?undoCheck(r,p):null, can=!!p && !bad;
   var what=k==='carico'?'Carico di '+(r.qta|0)+' pezzi in '+LUOGO[r.a]:k==='rettifica'?'Correzione '+t.q+' in '+LUOGO[r.luogo]:(r.qta|0)+' pezzi · '+t.txt;
   $('#delTitle').textContent = k==='sposta' ? 'Eliminare questo spostamento?' : k==='carico' ? 'Eliminare questo carico?' : 'Eliminare questa correzione?';
@@ -1419,11 +1469,15 @@ function delDone(msg){ $('#delOv').classList.remove('show'); delRow=null; toast(
 $('#delCancel').onclick=function(){ $('#delOv').classList.remove('show'); delRow=null; };
 $('#delOv').addEventListener('click',function(e){ if(e.target===this && !$('#delCancel').disabled){ this.classList.remove('show'); delRow=null; } });
 $('#delOnly').onclick=function(){
-  var r=delRow; if(!r) return; delBusy(true);
+  var r=delRow; if(!r) return;
+  if(!isOnline()){ $('#delErr').textContent='Servono la rete per eliminare dal registro.'; return; }
+  delBusy(true);
   fdb.doc('movimenti/'+r.id).delete().then(function(){ delDone('Riga eliminata dal registro.'); }).catch(delFail);
 };
 $('#delUndo').onclick=function(){
-  var r=delRow; if(!r) return; delBusy(true);
+  var r=delRow; if(!r) return;
+  if(!isOnline()){ $('#delErr').textContent='Servono la rete per annullare: le quantità vanno ricontrollate nel database.'; return; }
+  delBusy(true);
   var pref=fdb.doc('prodotti/'+r.prodottoId), mref=fdb.doc('movimenti/'+r.id), F=firebase.firestore.FieldValue, dl=undoDeltas(r), k=movKind(r);
   fdb.runTransaction(function(tx){
     return tx.get(pref).then(function(snap){
@@ -1913,6 +1967,7 @@ $('#ftCam').addEventListener('change',function(){ addFtFiles(this.files); this.v
 $('#ftPick').addEventListener('change',function(){ addFtFiles(this.files); this.value=''; });
 $('#ftSave').onclick=function(){
   if(fat.busy||!fat.files.length) return;
+  if(!isOnline()){ $('#ftErr').textContent='Le fatture si caricano solo con la rete (i file sono grandi). Tieni le foto e salvale quando torna il segnale.'; return; }
   var data=$('#ftData').value; if(!data){ $('#ftErr').textContent='Scegli la data della fattura.'; return; }
   var distId=$('#ftDist').value, dn=distId&&distById[distId]?distById[distId].nome:'', nota=$('#ftNota').value.trim();
   fat.busy=true; $('#ftSave').disabled=true; $('#ftSave').textContent='Caricamento…'; $('#ftErr').textContent='';

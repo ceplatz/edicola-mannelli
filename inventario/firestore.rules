@@ -104,10 +104,14 @@ service cloud.firestore {
       allow create: if (titolare() || personale())
         && nuovo().keys().hasOnly(
              ['prodottoId', 'prodottoNome', 'codice', 'da', 'a', 'qta',
-              'staffId', 'staffNome', 'ruolo', 'quando', 'tipo', 'nota', 'luogo', 'delta'])
+              'staffId', 'staffNome', 'ruolo', 'quando', 'quandoLocale', 'tipo', 'nota', 'luogo', 'delta'])
         && nuovo().quando == request.time
         && nuovo().qta is int && nuovo().qta > 0
         && nuovo().get('nota', '') is string && nuovo().get('nota', '').size() <= 120
+        // ora reale dell'azione sul dispositivo (può essere precedente se la rete mancava): ragionevolmente vicina a quella del server
+        && nuovo().get('quandoLocale', request.time) is timestamp
+        && nuovo().get('quandoLocale', request.time) <= request.time + duration.value(10, 'm')
+        && nuovo().get('quandoLocale', request.time) >= request.time - duration.value(45, 'd')
         && nuovo().ruolo == (titolare() ? 'titolare' : 'personale')
         && (sposta() || carico() || rettifica());
       allow update: if false;
