@@ -24,10 +24,26 @@ service cloud.firestore {
         && n.qtaNegozio + n.qtaMagazzino == o.qtaNegozio + o.qtaMagazzino;
     }
 
+    // Vendita: il personale può togliere pezzi dal NEGOZIO solo insieme a una vendita nuova (stesso salvataggio),
+    // e rimetterli solo annullando una vendita esistente. La quantità può andare sotto zero: vuol dire «da ricontare».
+    function soloVenditaStock() {
+      let n = request.resource.data;
+      let o = resource.data;
+      let vend = /databases/$(database)/documents/vendite/$(request.resource.data.ultimaVenditaId);
+      return request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['qtaNegozio', 'aggiornatoIl', 'ultimaVenditaId'])
+        && n.qtaNegozio is int && n.ultimaVenditaId is string
+        && ((n.qtaNegozio < o.qtaNegozio && o.qtaNegozio - n.qtaNegozio <= 500
+             && !exists(vend) && existsAfter(vend))
+         || (n.qtaNegozio > o.qtaNegozio && n.qtaNegozio - o.qtaNegozio <= 500
+             && exists(vend) && get(vend).data.annullata == false
+             && getAfter(vend).data.annullata == true));
+    }
+
     match /prodotti/{id} {
       allow read: if titolare() || personale();
       allow create, delete: if titolare();
-      allow update: if titolare() || (personale() && soloTrasferimento());
+      allow update: if titolare() || (personale() && (soloTrasferimento() || soloVenditaStock()));
 
       // Prezzo di acquisto: visibile SOLO al titolare.
       match /privato/{doc} {
@@ -67,6 +83,68 @@ service cloud.firestore {
     match /personale/{id} {
       allow read: if titolare() || personale();
       allow write: if titolare();
+    }
+
+    // Giornate chiuse («sigillate») dalla titolare: dopo la chiusura non si registrano né si annullano vendite di quel giorno.
+    function giornoChiuso(g) { return exists(/databases/$(database)/documents/giornate/$(g)); }
+    match /giornate/{giorno} {
+      allow read: if titolare() || personale();
+      allow write: if titolare();
+    }
+
+    // Turni: chi lavora su quale computer. Il personale può aprirne uno e chiudere il proprio.
+    match /turni/{id} {
+      allow read: if titolare() || personale();
+      allow create: if (titolare() || personale())
+        && request.resource.data.keys().hasOnly(
+             ['staffId', 'staffNome', 'postazione', 'giorno', 'ruolo', 'aperto', 'apertoLocale', 'chiusoIl'])
+        && request.resource.data.aperto == request.time
+        && request.resource.data.chiusoIl == null
+        && request.resource.data.giorno is string && request.resource.data.giorno.size() == 10
+        && request.resource.data.postazione is string && request.resource.data.postazione.size() <= 30
+        && request.resource.data.ruolo == (titolare() ? 'titolare' : 'personale')
+        && (titolare()
+            || exists(/databases/$(database)/documents/personale/$(request.resource.data.staffId)));
+      allow update: if titolare()
+        || (personale()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['chiusoIl'])
+            && resource.data.chiusoIl == null
+            && request.resource.data.chiusoIl == request.time);
+      allow delete: if false;
+    }
+
+    // Vendite: un documento per scontrino (righe con quantità e prezzo del momento). Mai modificate:
+    // si possono solo ANNULLARE (resta visibile, segnata come annullata) - il personale entro 10 minuti, la titolare sempre.
+    match /vendite/{id} {
+      allow read: if titolare() || personale();
+      allow create: if (titolare() || personale())
+        && request.resource.data.keys().hasOnly(
+             ['giorno', 'turnoId', 'staffId', 'staffNome', 'postazione', 'righe', 'pezzi', 'totale',
+              'ruolo', 'quando', 'quandoLocale', 'annullata'])
+        && request.resource.data.quando == request.time
+        && request.resource.data.annullata == false
+        && request.resource.data.giorno is string && request.resource.data.giorno.size() == 10
+        && !giornoChiuso(request.resource.data.giorno)
+        && request.resource.data.turnoId is string
+        && request.resource.data.righe is list
+        && request.resource.data.righe.size() >= 1 && request.resource.data.righe.size() <= 60
+        && request.resource.data.pezzi is int && request.resource.data.pezzi >= 1 && request.resource.data.pezzi <= 2000
+        && request.resource.data.totale is number && request.resource.data.totale >= 0
+        && request.resource.data.postazione is string && request.resource.data.postazione.size() <= 30
+        && request.resource.data.quandoLocale is timestamp
+        && request.resource.data.quandoLocale <= request.time + duration.value(10, 'm')
+        && request.resource.data.quandoLocale >= request.time - duration.value(45, 'd')
+        && request.resource.data.ruolo == (titolare() ? 'titolare' : 'personale')
+        && (titolare()
+            || exists(/databases/$(database)/documents/personale/$(request.resource.data.staffId)));
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['annullata', 'annullataIl', 'annullataDa'])
+        && request.resource.data.annullata == true && resource.data.annullata == false
+        && request.resource.data.annullataIl == request.time
+        && !giornoChiuso(resource.data.giorno)
+        && (titolare()
+            || (personale() && request.time < resource.data.quando + duration.value(11, 'm')));
+      allow delete: if false;
     }
 
     // Registro movimenti: lo legge SOLO il titolare. Si può aggiungere, mai modificare.
