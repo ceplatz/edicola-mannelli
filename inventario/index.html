@@ -304,6 +304,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 .vend-open label{display:block;font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--espresso-2);margin:14px 0 4px;text-transform:uppercase}
 .vend-open input{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:17px;outline:none}
 .vend-open .chip{padding:14px 22px;font-size:17px}
+.vo-pick{margin-top:10px;font-size:15px;color:var(--espresso-2)}.vo-pick.ok{color:var(--coral);font-weight:700;font-size:17px}
 .vend-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:0;flex:1;min-height:0}
 .vend-left{display:flex;flex-direction:column;min-height:0;padding:12px 14px;gap:8px;overflow:auto}
 .vend-right{display:flex;flex-direction:column;min-height:0;border-left:1.5px solid var(--line);background:var(--sand-2)}
@@ -644,7 +645,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <div id="vendOpen" class="vend-open">
     <h3>Apri il turno</h3>
     <p class="hint" style="margin:0 0 6px">Scegli chi sei e il nome di questo computer. Tutto quello che vendi finirà nel tuo foglio.</p>
-    <label>Chi sei?</label><div class="chips" id="voWho"></div>
+    <label>Chi sei?</label><div class="chips" id="voWho"></div><div class="vo-pick" id="voPick">Tocca il tuo nome</div>
     <label>Questo computer</label><input id="voPost" maxlength="30" placeholder="Es. Cassa 1" autocomplete="off">
     <div class="ferr" id="voErr"></div>
     <div class="acts" style="justify-content:flex-start"><button type="button" class="btn p" id="voGo" disabled>Apri turno</button></div>
@@ -1473,7 +1474,7 @@ function openCarico(p){
   $('#carInfo').innerHTML='<b>'+esc(p.nome)+'</b><br><span style="color:var(--espresso-2)">Ora: '+(p.qtaMagazzino|0)+' in magazzino · '+(p.qtaNegozio|0)+' in negozio</span>';
   $('#carQty').value='1'; $('#carNota').value=''; $('#carErr').textContent='';
   Array.prototype.forEach.call(document.querySelectorAll('#carDest button'),function(b){ b.classList.toggle('on',b.dataset.d==='magazzino'); });
-  $('#carWho').innerHTML=w.map(function(s){ return '<button type="button" class="chip'+(car.who&&car.who.id===s.id?' on':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('');
+  $('#carWho').innerHTML=w.map(function(s){ return '<button type="button" class="chip'+(car.who&&car.who.id===s.id?' sel':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('');
   updCar(); $('#carOv').classList.add('show');
 }
 function updCar(){ var n=car.qty|0; $('#carGo').disabled=!(n>=1&&n<=100000&&car.who); $('#carGo').textContent='Aggiungi '+(n>=1?n+(n===1?' pezzo':' pezzi'):'')+' in '+LUOGO[car.dest].toLowerCase(); }
@@ -1482,7 +1483,7 @@ $('#carPlus').onclick=function(){ if(car.qty<100000){ car.qty++; $('#carQty').va
 $('#carQty').addEventListener('input',function(){ var n=parseInt(this.value,10); car.qty=isFinite(n)?Math.max(0,Math.min(n,100000)):0; updCar(); });
 $('#carQty').addEventListener('blur',function(){ if(car.qty<1) car.qty=1; this.value=car.qty; updCar(); });
 $('#carDest').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; car.dest=b.dataset.d; Array.prototype.forEach.call(document.querySelectorAll('#carDest button'),function(x){ x.classList.toggle('on',x===b); }); updCar(); });
-$('#carWho').addEventListener('click',function(e){ var b=e.target.closest('.chip'); if(!b) return; car.who=whoChoices().filter(function(s){ return s.id===b.dataset.id; })[0]||null; Array.prototype.forEach.call(document.querySelectorAll('#carWho .chip'),function(x){ x.classList.toggle('on',x===b); }); updCar(); });
+$('#carWho').addEventListener('click',function(e){ var b=e.target.closest('.chip'); if(!b) return; car.who=whoChoices().filter(function(s){ return s.id===b.dataset.id; })[0]||null; Array.prototype.forEach.call(document.querySelectorAll('#carWho .chip'),function(x){ x.classList.toggle('sel',x===b); }); updCar(); });
 $('#carCancel').onclick=function(){ $('#carOv').classList.remove('show'); car=null; };
 $('#carOv').addEventListener('click',function(e){ if(e.target===this && !$('#carGo').dataset.busy){ this.classList.remove('show'); car=null; } });
 $('#carGo').onclick=function(){
@@ -2228,13 +2229,13 @@ $('#vendTabs').addEventListener('click',function(e){ var b=e.target.closest('but
 /* apertura turno */
 function renderOpenPanel(){
   var w=whoChoices(); vs.voWho = vs.voWho ? (w.filter(function(x){ return x.id===vs.voWho.id; })[0]||null) : null;
-  $('#voWho').innerHTML = w.length ? w.map(function(s){ return '<button type="button" class="chip'+(vs.voWho&&vs.voWho.id===s.id?' on':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('')
+  $('#voWho').innerHTML = w.length ? w.map(function(s){ return '<button type="button" class="chip'+(vs.voWho&&vs.voWho.id===s.id?' sel':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('')
     : '<div class="hint">Nessun dipendente con PIN. La titolare li aggiunge in Impostazioni.</div>';
   if(!$('#voPost').value) $('#voPost').value=lsGet(POST_KEY)||'Cassa 1';
   $('#voErr').textContent=''; updVo();
 }
-function updVo(){ $('#voGo').disabled=!(vs.voWho && $('#voPost').value.trim()); }
-$('#voWho').addEventListener('click',function(e){ var b=e.target.closest('.chip'); if(!b) return; vs.voWho=whoChoices().filter(function(s){ return s.id===b.dataset.id; })[0]||null; Array.prototype.forEach.call(document.querySelectorAll('#voWho .chip'),function(x){ x.classList.toggle('on',x===b); }); updVo(); });
+function updVo(){ $('#voGo').disabled=!(vs.voWho && $('#voPost').value.trim()); var pk=$('#voPick'); pk.textContent = vs.voWho ? 'Turno di '+vs.voWho.nome : 'Tocca il tuo nome'; pk.classList.toggle('ok',!!vs.voWho); }
+$('#voWho').addEventListener('click',function(e){ var b=e.target.closest('.chip'); if(!b) return; vs.voWho=whoChoices().filter(function(s){ return s.id===b.dataset.id; })[0]||null; Array.prototype.forEach.call(document.querySelectorAll('#voWho .chip'),function(x){ x.classList.toggle('sel',x===b); }); updVo(); });
 $('#voPost').addEventListener('input',updVo);
 $('#voGo').onclick=function(){ if(!vs.voWho) return; if(role==='titolare') vendOpenShift(); else askPin(vs.voWho,vendOpenShift); };
 function vendOpenShift(){
