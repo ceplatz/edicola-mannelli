@@ -955,13 +955,18 @@ function startProducts(){
 }
 function norm(s){ return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
 var CODE_KEYS=['codiceProdotto','codiceRivenditore','codiceCustom','barcode'];
+// Codici a barre: lo stesso codice può essere letto a 12 cifre (UPC-A) o a 13 (EAN-13, con uno 0 davanti) a seconda del lettore o di come è stato scritto;
+// si confronta quindi solo la parte numerica senza zeri iniziali (per codici di almeno 7 cifre: i codici corti come «001» restano com'erano).
+function digitsKey(s){ return String(s==null?'':s).replace(/\D/g,'').replace(/^0+/,''); }
+function codeSame(p,t){ var kt=digitsKey(t); if(kt.length<7) return false; return CODE_KEYS.some(function(k){ var a=digitsKey(p[k]); return a.length>=7 && a===kt; }); }
+function codeLike(p,t){ var kt=digitsKey(t); if(kt.length<7 || !/^[\d\s.\-]+$/.test(t)) return false; return CODE_KEYS.some(function(k){ var a=digitsKey(p[k]); return a.length>=7 && (a===kt || (kt.length>=9 && a.indexOf(kt)>=0)); }); }
 function matches(p,q){
   var terms=q.split(/\s+/).filter(Boolean);
   var hay=norm([p.nome,p.descrizione,p.categoria,distName(p)].concat(CODE_KEYS.map(function(k){return p[k];})).join(' '));
-  return terms.every(function(t){ return hay.indexOf(t)>=0; });
+  return terms.every(function(t){ return hay.indexOf(t)>=0 || codeLike(p,t); });
 }
 function rank(p,q){
-  if(CODE_KEYS.some(function(k){ return norm(p[k])===q; })) return 0;   // codice esatto
+  if(CODE_KEYS.some(function(k){ return norm(p[k])===q; }) || codeSame(p,q)) return 0;   // codice esatto
   if(norm(p.nome).indexOf(q)===0) return 1;
   return 2;
 }
@@ -1394,7 +1399,7 @@ $('#mvQ').addEventListener('input',function(){
 $('#mvRes').addEventListener('click',function(e){ var b=e.target.closest('.res'); if(b&&byId[b.dataset.id]) pickMoveProduct(byId[b.dataset.id]); });
 $('#mvScan').onclick=function(){ scan().then(function(c){
   if(!c) return;
-  var hit=products.filter(function(p){ return CODE_KEYS.some(function(k){ return p[k] && norm(p[k])===norm(c); }); })[0];
+  var hit=products.filter(function(p){ return CODE_KEYS.some(function(k){ return p[k] && norm(p[k])===norm(c); }) || codeSame(p,c); })[0];
   if(hit) pickMoveProduct(hit); else { $('#mvQ').value=c; toast('Nessun prodotto con il codice '+c+'.'); }
 }); };
 $('#mvChange').onclick=function(){ mv.prod=null; renderMove(); $('#mvQ').value=''; $('#mvRes').innerHTML=''; setTimeout(function(){ $('#mvQ').focus(); },50); };
