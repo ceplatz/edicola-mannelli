@@ -2,7 +2,7 @@
    Serve a far aprire l'app anche senza segnale (es. in magazzino): conserva sul dispositivo
    la pagina, il logo, i font e le librerie di Firebase. I DATI (prodotti, foto, registro) NON passano da qui:
    li tiene Firestore nella memoria del dispositivo e li sincronizza da solo quando torna la rete. */
-var VERSION = 'edicola-v1';
+var VERSION = 'edicola-v2';
 var CORE = ['./', 'index.html', 'config.js', 'logo.png', 'viridian-logo.png'];
 
 self.addEventListener('install', function (e) {
@@ -28,7 +28,9 @@ function networkFirst(req, ms) {
     var t = setTimeout(function () { // rete lenta o assente: meglio la copia salvata
       caches.match(req, { ignoreSearch: true }).then(function (hit) { if (hit && !done) { done = true; resolve(hit); } });
     }, ms);
-    fetch(req).then(function (res) {
+    // 'no-cache': chiede sempre al server se la pagina è cambiata (GitHub Pages permette di tenerla 10 minuti nella memoria del browser:
+    // senza questo, dopo un aggiornamento si vedrebbe ancora la versione vecchia)
+    fetch(req, { cache: 'no-cache' }).then(function (res) {
       clearTimeout(t);
       if (res && res.ok) { var copy = res.clone(); caches.open(VERSION).then(function (c) { c.put(req, copy); }); }
       if (!done) { done = true; resolve(res); }

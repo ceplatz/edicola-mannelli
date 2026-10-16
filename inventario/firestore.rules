@@ -192,7 +192,23 @@ service cloud.firestore {
         && nuovo().get('quandoLocale', request.time) >= request.time - duration.value(45, 'd')
         && nuovo().ruolo == (titolare() ? 'titolare' : 'personale')
         && (sposta() || carico() || rettifica());
-      allow update: if false;
+      // Solo il titolare può CORREGGERE una riga (data/ora, pezzi, nota). Si tiene traccia di com'era (qtaPrima, deltaPrima, quandoPrima).
+      allow update: if titolare()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['qta', 'delta', 'quandoLocale', 'nota', 'modificatoIl', 'modificatoDa', 'qtaPrima', 'deltaPrima', 'quandoPrima'])
+        && request.resource.data.modificatoIl == request.time
+        && request.resource.data.qta is int && request.resource.data.qta > 0 && request.resource.data.qta <= 100000
+        && request.resource.data.get('nota', '') is string && request.resource.data.get('nota', '').size() <= 120
+        && request.resource.data.quandoLocale is timestamp
+        && request.resource.data.quandoLocale <= request.time + duration.value(10, 'm')
+        && request.resource.data.quandoLocale >= request.time - duration.value(800, 'd')
+        && (resource.data.get('tipo', 'sposta') == 'rettifica'
+              ? (request.resource.data.delta is int && request.resource.data.delta != 0
+                 && request.resource.data.qta == (request.resource.data.delta > 0 ? request.resource.data.delta : -request.resource.data.delta))
+              : !('delta' in request.resource.data))
+        && request.resource.data.get('qtaPrima', 1) is int
+        && request.resource.data.get('deltaPrima', 1) is int
+        && request.resource.data.get('quandoPrima', request.time) is timestamp;
       allow delete: if titolare();
     }
   }

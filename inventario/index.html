@@ -204,6 +204,11 @@ dl.det dd{font-size:16px;font-weight:500;word-break:break-word}
 .logrow .who2{font-size:12px;color:var(--espresso-2)}
 .logdel{border:none;background:none;color:var(--danger);font-size:11px;text-decoration:underline;cursor:pointer;padding:2px 4px;margin-left:6px;opacity:.75}
 .logdel:hover{opacity:1}
+.logedit{border:none;background:none;color:var(--espresso-2);font-size:11px;text-decoration:underline;cursor:pointer;padding:2px 4px;margin-left:6px;opacity:.85}
+.logedit:hover{opacity:1}
+.tg.ed{background:#eef3fb;color:#2c5aa0;border-color:#c9d8f0}
+.efx{margin:10px 0 0;padding:10px 12px;border:1.5px dashed var(--gold);border-radius:12px;background:var(--sand-2);font-size:14px;line-height:1.5}
+.efx .bad{color:var(--danger);font-weight:700}
 .logrow .q2.up{color:#2f7d4f}.logrow .q2.down{color:var(--danger)}
 .logrow .q2{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:24px;grid-row:span 2;align-self:center}
 .sheet.wide{max-width:640px}
@@ -514,6 +519,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
       <label style="margin-top:6px">Prezzo di acquisto €</label>
       <input name="prezzoAcquisto" inputmode="decimal" placeholder="0,00">
     </div>
+    <div id="creatoRow" class="hidden"><label>Data di inserimento nel sistema</label><input type="date" name="dataInserimento"><div class="hint" style="margin:2px 2px 0">Si può correggere se l'articolo è stato inserito dopo (o prima) del giorno registrato.</div></div>
     <div class="ferr" id="ferr"></div>
     <div class="acts">
       <button type="button" class="btn d hidden" id="delBtn">Elimina</button>
@@ -559,6 +565,18 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <input id="logQ" placeholder="Filtra per prodotto o persona…" autocomplete="off">
   <div id="logList" style="margin-top:8px"></div>
   <div class="acts"><button type="button" class="btn p" id="logClose">Chiudi</button></div>
+</div></div>
+
+<!-- Modifica una riga del registro (titolare) -->
+<div class="ov" id="edOv" style="z-index:5600"><div class="sheet" style="max-width:480px">
+  <h3 id="edTitle">Correggi</h3>
+  <div id="edInfo" style="font-size:15px;line-height:1.45"></div>
+  <label>Data e ora</label><input type="datetime-local" id="edWhen">
+  <label id="edQLabel">Pezzi</label><input id="edQty" inputmode="numeric" autocomplete="off">
+  <label>Nota (facoltativa)</label><input id="edNota" maxlength="120" autocomplete="off">
+  <div class="efx" id="edFx"></div>
+  <div class="ferr" id="edErr"></div>
+  <div class="acts"><button type="button" class="btn" id="edCancel">Annulla</button><button type="button" class="btn p" id="edSave">Salva la correzione</button></div>
 </div></div>
 
 <!-- Elimina spostamento (titolare) -->
@@ -952,10 +970,11 @@ function renderResults(){
   var wrap=$('#resultsWrap');
   if(!q && !df && !cf){ wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
-  var list=products.filter(function(p){ return (!df || p.distributoreId===df) && (!cf || p.categoria===cf) && (!q || matches(p,q)); }).sort(function(a,b){
+  // La barra di ricerca ha la precedenza assoluta: se c'è scritto (o scansionato) qualcosa, si cerca in TUTTO l'archivio e i filtri distributore/categoria non contano.
+  var list=products.filter(function(p){ return q ? matches(p,q) : ((!df || p.distributoreId===df) && (!cf || p.categoria===cf)); }).sort(function(a,b){
     return (q?rank(a,q)-rank(b,q):0) || String(a.nome).localeCompare(String(b.nome),'it');
   });
-  $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati') : '';
+  $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati')+((q&&(df||cf))?' · la ricerca vale su tutto: i filtri non contano':'') : '';
   $('#results').innerHTML = list.length ? list.map(function(p){
     var codes=[p.codiceProdotto&&'Cod. '+p.codiceProdotto, p.codiceRivenditore&&'Riv. '+p.codiceRivenditore, p.codiceCustom&&'Pers. '+p.codiceCustom, p.barcode&&'▮ '+p.barcode, distName(p)].filter(Boolean).join(' · ');
     return '<button class="res" data-id="'+esc(p.id)+'">'+(p.miniatura?'<img class="thumb" alt="" src="'+esc(p.miniatura)+'">':'')+'<div class="info"><div class="nm">'+esc(p.nome)+'</div><div class="codes">'+esc(codes||'Nessun codice')+'</div>'+tagsHtml(p)+'</div>'
@@ -1097,7 +1116,8 @@ function openForm(id){
   pf.prezzoVendita.value = p? fmtIn(p.prezzoVendita) : '';
   pf.qtaNegozio.value = p? (p.qtaNegozio|0) : 0;
   pf.qtaMagazzino.value = p? (p.qtaMagazzino|0) : 0;
-  formBase={negozio:p?(p.qtaNegozio|0):0, magazzino:p?(p.qtaMagazzino|0):0};   // i numeri come erano all'apertura della scheda
+  formBase={negozio:p?(p.qtaNegozio|0):0, magazzino:p?(p.qtaMagazzino|0):0, creato:''};
+  var cd=p?tsDate(p.creatoIl):null; formBase.creato=cd?isoDay(cd):''; pf.dataInserimento.value=formBase.creato; $('#creatoRow').classList.toggle('hidden',!id);   // i numeri come erano all'apertura della scheda
   pf.prezzoAcquisto.value='';
   $('#qtyHint').textContent = id ? 'Per aggiungere pezzi appena acquistati usa «＋ Carico» nella scheda dell\'articolo: resta registrato quando e quanti. Cambiando qui un numero, viene registrata una «correzione».'
                                  : 'Le quantità inserite qui vengono registrate come primo carico, con data e ora.';
@@ -1134,6 +1154,7 @@ pf.addEventListener('submit',function(e){
   var sv=$('#formSave'); sv.disabled=true;
   var ref = editingId ? fdb.doc('prodotti/'+editingId) : fdb.collection('prodotti').doc();
   if(!editingId) rec.creatoIl=firebase.firestore.Timestamp.fromDate(new Date());
+  else if(f.dataInserimento.value && f.dataInserimento.value!==formBase.creato) rec.creatoIl=firebase.firestore.Timestamp.fromDate(new Date(f.dataInserimento.value+'T12:00:00'));   // data di inserimento corretta a mano
   var b=fdb.batch(), F=firebase.firestore.FieldValue, newQ={negozio:rec.qtaNegozio, magazzino:rec.qtaMagazzino}, logP={id:ref.id,nome:nome,codiceProdotto:rec.codiceProdotto};
   if(editingId){
     // in modifica le quantità si applicano come variazione (non come numero assoluto): così non si perde un carico o uno spostamento fatto nel frattempo
@@ -1450,7 +1471,7 @@ function whenText(d){ return d ? d.toLocaleDateString('it-IT',{day:'2-digit',mon
 var histOpen=false;
 function renderProdHistory(id,rows){
   var p=byId[id]; if(viewingId!==id || !p) return;
-  var items=rows.map(function(r){ var t=movText(r); return {when:tsDate(r.quandoLocale||r.quando), txt:t.txt, q:t.q, cls:t.cls, who:r.staffNome||'', nota:r.nota||''}; })
+  var items=rows.map(function(r){ var t=movText(r); return {when:tsDate(r.quandoLocale||r.quando), txt:t.txt, q:t.q, cls:t.cls, who:r.staffNome||'', nota:(r.nota||'')+(r.modificatoIl?(r.nota?' · ':'')+'modificata':'')}; })
     .sort(function(a,b){ return (b.when?b.when.getTime():Infinity)-(a.when?a.when.getTime():Infinity); });
   var c=tsDate(p.creatoIl);
   items.push({when:c, txt:'Inserito nel sistema', q:'', cls:'', who:'', nota:c?'':'(data non disponibile)'});
@@ -1545,7 +1566,9 @@ function openLog(){
   $('#logOv').classList.add('show'); $('#logQ').value=''; $('#logList').innerHTML='<div class="empty">Caricamento…</div>';
   if(unsubLog) unsubLog();
   unsubLog=fdb.collection('movimenti').orderBy('quando','desc').limit(150).onSnapshot(function(snap){
-    logRows=snap.docs.map(function(d){ var o=d.data({serverTimestamps:'estimate'}); o.id=d.id; return o; }); renderLog();
+    logRows=snap.docs.map(function(d){ var o=d.data({serverTimestamps:'estimate'}); o.id=d.id; return o; })
+      .sort(function(a,b){ return (tsDate(b.quandoLocale||b.quando)||0)-(tsDate(a.quandoLocale||a.quando)||0); });   // in ordine di data reale (anche se corretta a mano)
+    renderLog();
   },function(err){ console.warn('movimenti:',err.code); $('#logList').innerHTML='<div class="empty">Impossibile leggere il registro.</div>'; });
 }
 function closeLog(){ $('#logOv').classList.remove('show'); if(unsubLog){ unsubLog(); unsubLog=null; } }
@@ -1559,9 +1582,88 @@ function renderLog(){
     var d=tsDate(r.quandoLocale||r.quando);
     var when=d ? d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'})+'<br>'+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '…';
     var t=movText(r);
-    return '<div class="logrow"><div class="when">'+when+'</div><div class="what">'+esc(r.prodottoNome)+'</div><div class="q2 '+t.cls+'">'+t.q+'</div><div class="who2">'+esc(r.staffNome)+' · '+esc(t.txt)+(r.nota?' · '+esc(r.nota):'')+'<button type="button" class="logdel" data-id="'+esc(r.id)+'" title="Elimina questa riga">elimina</button></div></div>';
+    return '<div class="logrow"><div class="when">'+when+'</div><div class="what">'+esc(r.prodottoNome)+'</div><div class="q2 '+t.cls+'">'+t.q+'</div><div class="who2">'+esc(r.staffNome)+' · '+esc(t.txt)+(r.nota?' · '+esc(r.nota):'')+'<button type="button" class="logedit" data-id="'+esc(r.id)+'" title="Correggi data o pezzi">modifica</button><button type="button" class="logdel" data-id="'+esc(r.id)+'" title="Elimina questa riga">elimina</button>'+(r.modificatoIl?'<span class="tg ed" title="'+esc(editedWas(r))+'">modificata</span>':'')+'</div></div>';
   }).join('') : '<div class="empty">'+(logRows.length?'Nessun risultato.':'Nessun movimento registrato.')+'</div>';
 }
+
+
+/* ── Correggi una riga del registro: data, ora, pezzi (titolare). Le giacenze si adeguano e resta traccia di com'era. ── */
+var ed=null;
+function toLocalInput(d){ var z=function(n){ return (n<10?'0':'')+n; }; return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'T'+z(d.getHours())+':'+z(d.getMinutes()); }
+function editedWas(r){
+  var bits=[]; if(r.qtaPrima!=null) bits.push('era '+(r.deltaPrima!=null?((r.deltaPrima>0?'+':'−')+Math.abs(r.deltaPrima)):r.qtaPrima)+' pezzi'); var q=tsDate(r.quandoPrima); if(q) bits.push('il '+whenText(q));
+  return 'Modificata'+(bits.length?' ('+bits.join(', ')+')':'');
+}
+// cosa cambia nelle giacenze se la quantità della riga passa da quella attuale a «nuovo» (campo → variazione)
+function editEffect(r,nuovo){
+  var k=movKind(r), o={};
+  if(k==='carico') o[NOMEQ[r.a]]=nuovo-(r.qta|0);
+  else if(k==='rettifica') o[NOMEQ[r.luogo]]=nuovo-(r.delta|0);
+  else { var d=nuovo-(r.qta|0); o[NOMEQ[r.da]]=-d; o[NOMEQ[r.a]]=d; }
+  Object.keys(o).forEach(function(f){ if(!o[f]) delete o[f]; });
+  return o;
+}
+function edValue(){ var n=parseInt(String($('#edQty').value).replace('−','-'),10); return isFinite(n)?n:null; }
+function edRefresh(){
+  var r=ed.row, p=byId[r.prodottoId], v=edValue(), k=movKind(r), bad='', fx=[];
+  if(v===null || v===0 || (k!=='rettifica' && v<0) || Math.abs(v)>100000) bad='Scrivi un numero di pezzi valido.';
+  else {
+    var eff=editEffect(r,v);
+    Object.keys(eff).forEach(function(f){
+      var loc=f==='qtaNegozio'?'Negozio':'Magazzino', cur=p?(p[f]|0):null;
+      if(cur===null){ bad='L\'articolo non esiste più: si può correggere solo la data.'; return; }
+      var nv=cur+eff[f]; fx.push(loc+': '+cur+' → <b>'+nv+'</b>');
+      if(nv<0) bad='Non si può: in '+loc+' ci sono ora '+cur+' pezzi e ne servirebbero '+(-eff[f])+' in meno.';
+    });
+  }
+  $('#edFx').innerHTML = bad ? '<span class="bad">'+esc(bad)+'</span>' : (fx.length?'<b>Giacenze:</b> '+fx.join(' · '):'Le giacenze non cambiano.');
+  $('#edSave').disabled=!!bad || !$('#edWhen').value; ed.bad=bad; return !bad;
+}
+function openEdit(r){
+  var k=movKind(r), t=movText(r), d=tsDate(r.quandoLocale||r.quando)||new Date(), p=byId[r.prodottoId];
+  ed={row:r}; $('#edErr').textContent='';
+  $('#edTitle').textContent = k==='carico'?'Correggi il carico':k==='rettifica'?'Correggi la correzione':'Correggi lo spostamento';
+  $('#edInfo').innerHTML='<b>'+esc(r.prodottoNome)+'</b><br><span style="color:var(--espresso-2)">'+esc(t.txt)+' · '+esc(r.staffNome||'')+'</span>';
+  $('#edWhen').value=toLocalInput(d);
+  $('#edQLabel').textContent = k==='carico'?'Quanti pezzi sono arrivati?':k==='rettifica'?'Variazione (usa − per togliere)':'Quanti pezzi spostati?';
+  $('#edQty').value = k==='rettifica' ? (r.delta|0) : (r.qta|0);
+  $('#edNota').value=r.nota||''; edRefresh(); $('#edOv').classList.add('show');
+}
+$('#logList').addEventListener('click',function(e){
+  var b=e.target.closest('.logedit'); if(!b) return;
+  var r=logRows.filter(function(x){ return x.id===b.dataset.id; })[0]; if(r) openEdit(r);
+});
+$('#edQty').addEventListener('input',function(){ if(ed) edRefresh(); });
+$('#edWhen').addEventListener('input',function(){ if(ed) edRefresh(); });
+$('#edCancel').onclick=function(){ $('#edOv').classList.remove('show'); ed=null; };
+$('#edOv').addEventListener('click',function(e){ if(e.target===this && !$('#edSave').dataset.busy){ this.classList.remove('show'); ed=null; } });
+$('#edSave').onclick=function(){
+  if(!ed || !edRefresh()) return;
+  if(!isOnline()){ $('#edErr').textContent='Servono la rete per correggere una riga: le quantità vanno ricontrollate nel database.'; return; }
+  var r=ed.row, k=movKind(r), v=edValue(), F=firebase.firestore.FieldValue, btn=$('#edSave');
+  var when=new Date($('#edWhen').value); if(isNaN(when.getTime())){ $('#edErr').textContent='Controlla la data.'; return; }
+  if(when.getTime()>Date.now()+10*60000){ $('#edErr').textContent='La data non può essere nel futuro.'; return; }
+  var upd={quandoLocale:firebase.firestore.Timestamp.fromDate(when), nota:$('#edNota').value.trim().slice(0,120), modificatoIl:F.serverTimestamp(), modificatoDa:'Titolare'};
+  if(k==='rettifica'){ upd.delta=v; upd.qta=Math.abs(v); } else upd.qta=v;
+  if(r.quandoPrima==null) upd.quandoPrima=r.quandoLocale||r.quando||firebase.firestore.Timestamp.fromDate(when);   // com'era la prima volta
+  if(r.qtaPrima==null){ upd.qtaPrima=r.qta|0; if(k==='rettifica') upd.deltaPrima=r.delta|0; }
+  var eff=editEffect(r,v), fields=Object.keys(eff), mref=fdb.doc('movimenti/'+r.id), pref=fdb.doc('prodotti/'+r.prodottoId);
+  btn.disabled=true; btn.dataset.busy='1'; $('#edErr').textContent='';
+  var job = !fields.length ? (function(){ var b=fdb.batch(); b.update(mref,upd); return b.commit(); })()
+    : fdb.runTransaction(function(tx){
+        return tx.get(pref).then(function(snap){
+          if(!snap.exists) throw {code:'no-product'};
+          var d=snap.data(), pu={aggiornatoIl:F.serverTimestamp()};
+          fields.forEach(function(f){ var nv=(d[f]|0)+eff[f]; if(nv<0) throw {code:'not-enough',field:f}; pu[f]=nv; });
+          tx.update(pref,pu); tx.update(mref,upd);
+        });
+      });
+  job.then(function(){ delete btn.dataset.busy; $('#edOv').classList.remove('show'); ed=null; toast(fields.length?'Correzione salvata: giacenze aggiornate.':'Correzione salvata.'); })
+    .catch(function(er){ delete btn.dataset.busy; btn.disabled=false; console.warn('modifica riga:',er&&er.code);
+      $('#edErr').textContent = er&&er.code==='permission-denied' ? 'Il database non permette ancora le correzioni: pubblica le regole aggiornate (firestore.rules) e riprova.'
+        : er&&er.code==='not-enough' ? 'Nel frattempo le giacenze sono cambiate: non ci sono più abbastanza pezzi per questa correzione.'
+        : er&&er.code==='no-product' ? 'L\'articolo non esiste più: si può correggere solo la data.' : 'Non salvata: manca la connessione. Riprova.'; });
+};
 
 /* ── Elimina uno spostamento dal registro (solo titolare) ── */
 var delRow=null;
@@ -1940,7 +2042,7 @@ function openItems(){
   Promise.all([loadCosts(),fdb.collection('movimenti').get()]).then(function(r){
     itm.costs=r[0]; itm.moved={}; itm.carico={};
     r[1].docs.forEach(function(d){
-      var o=d.data({serverTimestamps:'estimate'}), t=tsDate(o.quando); if(!t||!o.prodottoId) return;
+      var o=d.data({serverTimestamps:'estimate'}), t=tsDate(o.quandoLocale||o.quando); if(!t||!o.prodottoId) return;
       var k=movKind(o), m=k==='carico'?itm.carico:k==='sposta'?itm.moved:null;      // le correzioni non contano né come carico né come spostamento
       if(m && (!m[o.prodottoId]||t>m[o.prodottoId])) m[o.prodottoId]=t;
     });
@@ -2279,7 +2381,7 @@ function vsRender(){
     $('#vsRes').innerHTML=''; return;
   }
   $('#vsQuick').innerHTML='';
-  var list=products.filter(function(p){ return (!df||p.distributoreId===df) && (!cf||p.categoria===cf) && (!q||matches(p,q)); })
+  var list=products.filter(function(p){ return q ? matches(p,q) : ((!df||p.distributoreId===df) && (!cf||p.categoria===cf)); })   // scrivere = cercare in tutto
     .sort(function(a,b){ return (q?rank(a,q)-rank(b,q):0) || String(a.nome).localeCompare(String(b.nome),'it'); });
   var shown=list.slice(0,60);
   $('#vsRes').innerHTML = shown.length ? '<div class="vtiles">'+shown.map(function(p){ return vsTile(p,P.qty); }).join('')+'</div>'+(list.length>60?'<div class="hint" style="margin:8px 2px">'+list.length+' risultati: scrivi qualcosa in più per restringere.</div>':'')
