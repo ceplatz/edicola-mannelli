@@ -579,6 +579,17 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <div class="acts"><button type="button" class="btn" id="edCancel">Annulla</button><button type="button" class="btn p" id="edSave">Salva la correzione</button></div>
 </div></div>
 
+<!-- Collega un codice a barre a un articolo (titolare) -->
+<div class="ov" id="lnkOv" style="z-index:5700"><div class="sheet" style="max-width:480px">
+  <h3>Collega il codice a barre</h3>
+  <div id="lnkCode" style="font-size:17px;font-weight:800;letter-spacing:.5px"></div>
+  <div style="font-size:14px;color:var(--espresso-2);margin-top:4px">Cerca l'articolo per nome e toccalo: da ora, scansionando questo codice, apparirà lui.</div>
+  <input id="lnkQ" type="search" placeholder="Nome dell'articolo…" autocomplete="off" style="margin-top:12px">
+  <div id="lnkRes" style="margin-top:8px"></div>
+  <div class="ferr" id="lnkErr"></div>
+  <div class="acts"><button type="button" class="btn" id="lnkCancel">Annulla</button></div>
+</div></div>
+
 <!-- Elimina spostamento (titolare) -->
 <div class="ov" id="delOv" style="z-index:5600"><div class="sheet" style="max-width:460px">
   <h3 id="delTitle">Eliminare questo spostamento?</h3>
@@ -985,12 +996,50 @@ function renderResults(){
     return '<button class="res" data-id="'+esc(p.id)+'">'+(p.miniatura?'<img class="thumb" alt="" src="'+esc(p.miniatura)+'">':'')+'<div class="info"><div class="nm">'+esc(p.nome)+'</div><div class="codes">'+esc(codes||'Nessun codice')+'</div>'+tagsHtml(p)+'</div>'
       +'<div class="qty"><div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">Negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">Magazzino<b>'+(p.qtaMagazzino|0)+'</b></div></div>'
       +'<div class="pr">'+eur.format(p.prezzoVendita||0)+'</div></button>';
-  }).join('') : '<div class="empty">'+(products.length ? 'Nessun risultato.' : 'Ancora nessun prodotto.'+(role==='titolare'?' Usa «Nuovo prodotto» per iniziare.':''))+'</div>';
+  }).join('') : '<div class="empty">'+emptyHtml(q)+'</div>';
+}
+// Un numero lungo senza risultati è quasi sempre un codice a barre che nessun articolo ha ancora: spieghiamolo e (titolare) offriamo di collegarlo.
+function looksLikeBarcode(q){ return /^[\d\s.\-]+$/.test(q) && String(q).replace(/\D/g,'').length>=7; }
+function emptyHtml(q){
+  if(!products.length) return 'Ancora nessun prodotto.'+(role==='titolare'?' Usa «Nuovo prodotto» per iniziare.':'');
+  if(q && looksLikeBarcode(q)){
+    return '<b>Nessun articolo ha questo codice a barre.</b><br><span style="font-size:14px">Non è ancora stato collegato a nessun articolo.</span>'
+      +(role==='titolare' ? '<br><button type="button" class="btn p" id="lnkOpen" style="margin-top:14px">🔗 Collega questo codice a un articolo</button>' : '<br><span style="font-size:14px">Chiedi alla titolare di collegarlo.</span>');
+  }
+  return 'Nessun risultato.';
 }
 $('#q').addEventListener('input',renderResults);
 $('#distFilter').addEventListener('change',function(){ fillCatSelects(); renderResults(); });
 $('#catFilter').addEventListener('change',renderResults);
 $('#results').addEventListener('click',function(e){ var b=e.target.closest('.res'); if(b) openView(b.dataset.id); });
+/* ── Collega un codice a barre a un articolo ── */
+var lnkCode='';
+function lnkRender(){
+  var q=norm($('#lnkQ').value), box=$('#lnkRes');
+  if(!q){ box.innerHTML=''; return; }
+  var list=products.filter(function(p){ return matches(p,q); }).sort(function(a,b){ return rank(a,q)-rank(b,q) || String(a.nome).localeCompare(String(b.nome),'it'); }).slice(0,8);
+  box.innerHTML = list.length ? list.map(function(p){
+    return '<button type="button" class="res" data-id="'+esc(p.id)+'"><div class="info"><div class="nm">'+esc(p.nome)+'</div><div class="codes">'+esc(p.barcode?'Ha già il codice a barre '+p.barcode:([p.codiceProdotto,p.codiceRivenditore,p.codiceCustom].filter(Boolean).join(' · ')||distName(p)||'—'))+'</div></div></button>';
+  }).join('') : '<div class="empty" style="padding:14px">Nessun articolo con questo nome.</div>';
+}
+$('#results').addEventListener('click',function(e){
+  if(!e.target.closest('#lnkOpen') || role!=='titolare') return;
+  lnkCode=$('#q').value.replace(/\s+/g,'').trim();
+  $('#lnkCode').textContent=lnkCode; $('#lnkQ').value=''; $('#lnkRes').innerHTML=''; $('#lnkErr').textContent='';
+  $('#lnkOv').classList.add('show'); setTimeout(function(){ $('#lnkQ').focus(); },50);
+});
+$('#lnkQ').addEventListener('input',lnkRender);
+$('#lnkCancel').onclick=function(){ $('#lnkOv').classList.remove('show'); };
+$('#lnkRes').addEventListener('click',function(e){
+  var b=e.target.closest('.res'); if(!b || role!=='titolare') return;
+  var p=byId[b.dataset.id]; if(!p) return;
+  var other=products.filter(function(o){ return o.id!==p.id && o.barcode===lnkCode; })[0];
+  if(other){ $('#lnkErr').textContent='Questo codice è già collegato a «'+other.nome+'».'; return; }
+  if(p.barcode && !confirm('«'+p.nome+'» ha già il codice a barre '+p.barcode+'.\nSostituirlo con '+lnkCode+'?')) return;
+  var bt=fdb.batch(); bt.update(fdb.doc('prodotti/'+p.id),{barcode:lnkCode,aggiornatoIl:firebase.firestore.FieldValue.serverTimestamp()});
+  commitFast(bt).then(function(r){ $('#lnkOv').classList.remove('show'); toast(r.queued?QUEUED_MSG:'Codice collegato a «'+p.nome+'».'); setTimeout(renderResults,0); })
+    .catch(function(er){ $('#lnkErr').textContent = er.code==='permission-denied' ? 'Permesso negato dalle regole del database.' : 'Non riuscito. Controlla la connessione.'; });
+});
 
 /* ── Scheda prodotto ── */
 function tagsHtml(p){
