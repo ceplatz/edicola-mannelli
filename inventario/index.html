@@ -126,6 +126,17 @@ h2.sec{font-family:'Cormorant Garamond',serif;font-size:24px;margin:26px 0 10px}
 .res .info{flex:1;min-width:0}
 .res .nm{font-weight:700;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .res .codes{font-size:12px;color:var(--espresso-2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.resg{background:var(--sand-3);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px}
+.resg .gh{display:flex;align-items:baseline;gap:10px;justify-content:space-between}
+.resg .nm{font-weight:700;font-size:16px}
+.resg .gp{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:22px;white-space:nowrap}
+.resg .codes{font-size:12px;color:var(--espresso-2);margin-top:2px}
+.szrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.szc{min-width:64px;min-height:56px;border-radius:12px;border:1.5px solid var(--line);background:var(--sand-2);padding:6px 10px;cursor:pointer;text-align:center;line-height:1.15;font-family:inherit;color:inherit}
+.szc:hover{border-color:var(--peach);box-shadow:var(--shadow)}
+.szc b{display:block;font-size:19px}
+.szc span{font-size:11px;font-weight:700;color:var(--espresso-2)}
+.szc.z{opacity:.55}.szc.z span{color:var(--danger)}
 .res .pr{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:22px}
 .qty{display:flex;gap:6px;flex-shrink:0}
 .pill{border-radius:10px;padding:4px 10px;font-size:12px;font-weight:700;background:var(--sand-2);border:1px solid var(--line);text-align:center;line-height:1.2}
@@ -326,6 +337,9 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 .vt .sub{font-size:12px;color:var(--espresso-2);display:flex;gap:8px;flex-wrap:wrap}
 .vt .sub b{color:var(--espresso)}
 .vt .sub .z{color:#a33;font-weight:700}
+.vgrp{grid-column:1/-1;padding:8px 10px;border:1.5px solid var(--line);border-radius:14px;background:#fff}
+.vgrp .nm{font-weight:700;font-size:14px}
+.vgrp .szc{background:var(--sand-3)}
 .vt .badge{position:absolute;top:6px;right:8px;background:var(--coral);color:#fff;border-radius:999px;font-size:12px;font-weight:700;padding:1px 8px}
 .vend-tk-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;font-size:16px}
 .vend-tk-head .btn{padding:8px 12px;font-size:13px}
@@ -974,8 +988,14 @@ function codeLike(p,t){ var kt=digitsKey(t); if(kt.length<7 || !/^[\d\s.\-]+$/.t
 function matches(p,q){
   var terms=q.split(/\s+/).filter(Boolean);
   var hay=norm([p.nome,p.descrizione,p.categoria,distName(p)].concat(CODE_KEYS.map(function(k){return p[k];})).join(' '));
-  return terms.every(function(t){ return hay.indexOf(t)>=0 || codeLike(p,t); });
+  return terms.every(function(t){ return isSizeTok(t) ? hasSizeWord(p,t) : (hay.indexOf(t)>=0 || codeLike(p,t)); });
 }
+// Taglie: «T-shirt whisky nero – S». Una taglia scritta da sola nella ricerca (S, M, L, XL…) vale come parola intera, non come lettera dentro un'altra parola.
+var SIZE_ORDER=['XXS','XS','S','M','L','XL','XXL','XXXL','2XL','3XL','4XL','5XL'];
+var SIZE_RX=/^(.*\S)\s+[–—\-]\s*(XXS|XS|S|M|L|XL|XXL|XXXL|[2-5]XL)\s*$/i;
+function sizeInfo(p){ var m=SIZE_RX.exec(String(p.nome||'').trim()); return m ? {base:m[1].trim(), size:m[2].toUpperCase()} : null; }
+function isSizeTok(t){ return SIZE_ORDER.indexOf(String(t).toUpperCase())>=0; }
+function hasSizeWord(p,t){ var si=sizeInfo(p), T=String(t).toUpperCase(); if(si) return si.size===T; return new RegExp('(^|[^a-z0-9])'+norm(t)+'($|[^a-z0-9])').test(norm(p.nome)); }
 function rank(p,q){
   if(CODE_KEYS.some(function(k){ return norm(p[k])===q; }) || codeSame(p,q)) return 0;   // codice esatto
   if(norm(p.nome).indexOf(q)===0) return 1;
@@ -991,7 +1011,19 @@ function renderResults(){
     return (q?rank(a,q)-rank(b,q):0) || String(a.nome).localeCompare(String(b.nome),'it');
   });
   $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati')+((q&&(df||cf))?' · la ricerca vale su tutto: i filtri non contano':'') : '';
+  var groups={};
+  list.forEach(function(p){ var si=sizeInfo(p); if(si){ var k=norm(si.base)+'|'+(p.distributoreId||''); (groups[k]=groups[k]||[]).push(p); } });
+  var shown={};
   $('#results').innerHTML = list.length ? list.map(function(p){
+    var si=sizeInfo(p), gk=si&&norm(si.base)+'|'+(p.distributoreId||''), g=gk&&groups[gk];
+    if(g && g.length>=2){
+      if(shown[gk]) return '';
+      shown[gk]=1;
+      var rows=g.slice().sort(function(a,b){ return SIZE_ORDER.indexOf(sizeInfo(a).size)-SIZE_ORDER.indexOf(sizeInfo(b).size); });
+      var pr=rows.every(function(x){ return x.prezzoVendita===rows[0].prezzoVendita; }) ? '<div class="gp">'+eur.format(rows[0].prezzoVendita||0)+'</div>' : '';
+      return '<div class="resg"><div class="gh"><div><div class="nm">'+esc(si.base)+'</div><div class="codes">'+esc([p.codiceCustom&&'Pers. '+p.codiceCustom, distName(p),'scegli la taglia'].filter(Boolean).join(' · '))+'</div></div>'+pr+'</div>'
+        +'<div class="szrow">'+rows.map(function(x){ var n=x.qtaNegozio|0, m=x.qtaMagazzino|0; return '<button type="button" class="szc'+(n+m<=0?' z':'')+'" data-id="'+esc(x.id)+'" aria-label="'+esc(x.nome)+'"><b>'+esc(sizeInfo(x).size)+'</b><span>Neg '+n+' · Mag '+m+'</span></button>'; }).join('')+'</div></div>';
+    }
     var codes=[p.codiceProdotto&&'Cod. '+p.codiceProdotto, p.codiceRivenditore&&'Riv. '+p.codiceRivenditore, p.codiceCustom&&'Pers. '+p.codiceCustom, p.barcode&&'▮ '+p.barcode, distName(p)].filter(Boolean).join(' · ');
     return '<button class="res" data-id="'+esc(p.id)+'">'+(p.miniatura?'<img class="thumb" alt="" src="'+esc(p.miniatura)+'">':'')+'<div class="info"><div class="nm">'+esc(p.nome)+'</div><div class="codes">'+esc(codes||'Nessun codice')+'</div>'+tagsHtml(p)+'</div>'
       +'<div class="qty"><div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">Negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">Magazzino<b>'+(p.qtaMagazzino|0)+'</b></div></div>'
@@ -1011,7 +1043,7 @@ function emptyHtml(q){
 $('#q').addEventListener('input',renderResults);
 $('#distFilter').addEventListener('change',function(){ fillCatSelects(); renderResults(); });
 $('#catFilter').addEventListener('change',renderResults);
-$('#results').addEventListener('click',function(e){ var b=e.target.closest('.res'); if(b) openView(b.dataset.id); });
+$('#results').addEventListener('click',function(e){ var b=e.target.closest('.res,.szc'); if(b) openView(b.dataset.id); });
 /* ── Collega un codice a barre a un articolo ── */
 var lnkCode='';
 function lnkRender(){
@@ -1531,7 +1563,7 @@ function renderProdHistory(id,rows){
   items.push({when:c, txt:'Inserito nel sistema', q:'', cls:'', who:'', nota:c?'':'(data non disponibile)'});
   var shown=histOpen?items:items.slice(0,6);
   $('#histMov').innerHTML='<div class="sec-own"><div class="tag-own" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--gold)">Storia dell\'articolo (solo titolare)</div>'
-    +shown.map(function(i){ return '<div class="hrow"><div class="hw">'+esc(i.when?i.when.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+i.when.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'')+'</div><div>'+esc(i.txt)+'</div><div class="hq '+i.cls+'">'+esc(i.q)+'</div><div class="hs">'+esc([i.who,i.nota].filter(Boolean).join(' · '))+'</div></div>'; }).join('')
+    +shown.map(function(i){ return '<div class="hrow"><div class="hw">'+(i.when?esc(i.when.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}))+'<br>'+esc(i.when.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})):'')+'</div><div>'+esc(i.txt)+'</div><div class="hq '+i.cls+'">'+esc(i.q)+'</div><div class="hs">'+esc([i.who,i.nota].filter(Boolean).join(' · '))+'</div></div>'; }).join('')
     +(items.length>6?'<button type="button" class="btn" id="histMore" style="margin-top:8px;padding:8px 14px;font-size:13px">'+(histOpen?'Mostra meno':'Mostra tutto ('+items.length+')')+'</button>':'')+'</div>';
   var m=$('#histMore'); if(m) m.onclick=function(){ histOpen=!histOpen; renderProdHistory(id,rows); };
 }
@@ -2438,7 +2470,19 @@ function vsRender(){
   var list=products.filter(function(p){ return q ? matches(p,q) : ((!df||p.distributoreId===df) && (!cf||p.categoria===cf)); })   // scrivere = cercare in tutto
     .sort(function(a,b){ return (q?rank(a,q)-rank(b,q):0) || String(a.nome).localeCompare(String(b.nome),'it'); });
   var shown=list.slice(0,60);
-  $('#vsRes').innerHTML = shown.length ? '<div class="vtiles">'+shown.map(function(p){ return vsTile(p,P.qty); }).join('')+'</div>'+(list.length>60?'<div class="hint" style="margin:8px 2px">'+list.length+' risultati: scrivi qualcosa in più per restringere.</div>':'')
+  var vg={}, vseen={};
+  list.forEach(function(p){ var si=sizeInfo(p); if(si){ var k=norm(si.base)+'|'+(p.distributoreId||''); (vg[k]=vg[k]||[]).push(p); } });
+  $('#vsRes').innerHTML = shown.length ? '<div class="vtiles">'+shown.map(function(p){
+      var si=sizeInfo(p), gk=si&&norm(si.base)+'|'+(p.distributoreId||''), g=gk&&vg[gk];
+      if(g && g.length>=2){
+        if(vseen[gk]) return ''; vseen[gk]=1;
+        var rows=g.slice().sort(function(a,b){ return SIZE_ORDER.indexOf(sizeInfo(a).size)-SIZE_ORDER.indexOf(sizeInfo(b).size); });
+        var same=rows.every(function(x){ return x.prezzoVendita===rows[0].prezzoVendita; });
+        return '<div class="vgrp"><div class="nm">'+esc(si.base)+(same&&rows[0].prezzoVendita>0?' · <b>'+money(rows[0].prezzoVendita)+'</b>':'')+(P.qty>1?' · ×'+P.qty:'')+'</div><div class="szrow">'
+          +rows.map(function(x){ var n=x.qtaNegozio|0; return '<button type="button" class="szc'+(n<=0?' z':'')+'" data-id="'+esc(x.id)+'" aria-label="'+esc(x.nome)+'"><b>'+esc(sizeInfo(x).size)+'</b><span>negozio '+n+'</span></button>'; }).join('')+'</div></div>';
+      }
+      return vsTile(p,P.qty);
+    }).join('')+'</div>'+(list.length>60?'<div class="hint" style="margin:8px 2px">'+list.length+' risultati: scrivi qualcosa in più per restringere.</div>':'')
     : '<div class="empty">Nessun articolo trovato.</div>';
 }
 function vsClearSearch(){ $('#vsQ').value=''; vsRender(); var q=$('#vsQ'); if(q && !('ontouchstart' in window)) q.focus(); }
@@ -2451,7 +2495,7 @@ $('#vsClear').onclick=vsClearSearch;
 $('#vsDist').addEventListener('change',function(){ vsFillFilters(); vsRender(); });
 $('#vsCat').addEventListener('change',vsRender);
 function vsPick(id){ var P=vsParse(); addToCart(byId[id],P.qty); var had=!!$('#vsQ').value.trim(); if(had) vsClearSearch(); }
-$('#vendMain').addEventListener('click',function(e){ var t=e.target.closest('.vt'); if(t) vsPick(t.dataset.id); });
+$('#vendMain').addEventListener('click',function(e){ var t=e.target.closest('.vt,.szc'); if(t) vsPick(t.dataset.id); });
 
 /* la vendita in corso */
 function addToCart(p,n){
