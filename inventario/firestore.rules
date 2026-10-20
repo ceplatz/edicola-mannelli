@@ -113,6 +113,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Carrello in corso di un turno (bozza, non ancora registrata): una copia per turno, così non si perde se si chiude l'app
+    // e la titolare lo vede in diretta. Sparisce quando la vendita è registrata, il carrello svuotato o il turno chiuso.
+    match /carrelli/{id} {
+      allow read: if titolare() || personale();
+      allow create, update: if (titolare() || personale())
+        && request.resource.data.keys().hasOnly(['turnoId', 'staffNome', 'postazione', 'giorno', 'righe', 'pezzi', 'totale', 'aggiornato'])
+        && request.resource.data.turnoId == id
+        && request.resource.data.giorno is string && request.resource.data.giorno.size() == 10
+        && request.resource.data.righe is list && request.resource.data.righe.size() <= 60
+        && request.resource.data.pezzi is int && request.resource.data.totale is number
+        && !giornoChiuso(request.resource.data.giorno);
+      allow delete: if titolare() || personale();
+    }
+
     // Vendite: un documento per scontrino (righe con quantità e prezzo del momento). Mai modificate:
     // si possono solo ANNULLARE (resta visibile, segnata come annullata) - il personale entro 10 minuti, la titolare sempre.
     match /vendite/{id} {

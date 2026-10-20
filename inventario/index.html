@@ -337,6 +337,10 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 .vt .sub{font-size:12px;color:var(--espresso-2);display:flex;gap:8px;flex-wrap:wrap}
 .vt .sub b{color:var(--espresso)}
 .vt .sub .z{color:#a33;font-weight:700}
+.vo-open{background:var(--sand-3);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:22px}
+.vo-sh{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)}
+.vo-sh:first-of-type{border-top:0}
+.vo-sh .btn{white-space:nowrap}
 .vgrp{grid-column:1/-1;padding:8px 10px;border:1.5px solid var(--line);border-radius:14px;background:#fff}
 .vgrp .nm{font-weight:700;font-size:14px}
 .vgrp .szc{background:var(--sand-3)}
@@ -686,6 +690,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
     <button type="button" class="btn p" id="vendExit">Esci</button>
   </div>
   <div id="vendOpen" class="vend-open">
+    <div id="voShifts"></div>
     <h3>Apri il turno</h3>
     <p class="hint" style="margin:0 0 6px">Scegli chi sei e il nome di questo computer. Tutto quello che vendi finirà nel tuo foglio.</p>
     <label>Chi sei?</label><div class="chips" id="voWho"></div><div class="vo-pick" id="voPick">Tocca il tuo nome</div>
@@ -2359,7 +2364,7 @@ $('#fvDel').onclick=function(){
 
 
 /* ── Vendite: turni, scontrini e giornata ── */
-var vs={shift:null,cart:[],tab:'cerca',day:'',sales:[],seal:null,top:[],busy:false,unsub:[],tick:null,voWho:null,ending:false};
+var vs={shift:null,cart:[],cartSent:'[]',cartTimer:null,pk:[],pkShifts:[],pkCarts:{},tab:'cerca',day:'',sales:[],seal:null,top:[],busy:false,unsub:[],tick:null,voWho:null,ending:false};
 var SHIFT_KEY='edicola.turno', POST_KEY='edicola.postazione', TOP_KEY='edicola.top', CANCEL_MIN=10;
 function shiftKey(){ return SHIFT_KEY+'.'+role; }   // il turno del personale e quello della titolare sono separati su uno stesso computer
 function lsGet(k){ try{ return JSON.parse(localStorage.getItem(k)||'null'); }catch(e){ return null; } }
@@ -2394,7 +2399,7 @@ function vendRender(){
 function vendLockUi(){
   var sealed=!!vs.seal; $('#vendLock').classList.toggle('hidden',!sealed); vtRender();
 }
-function vendStop(){ vs.unsub.forEach(function(f){ try{ f(); }catch(e){} }); vs.unsub=[]; clearInterval(vs.tick); }
+function vendStop(){ vs.unsub.forEach(function(f){ try{ f(); }catch(e){} }); vs.unsub=[]; clearInterval(vs.tick); peekStop(); }
 function vendStart(){
   vendStop(); var day=vs.day, sh=vs.shift;
   vs.unsub.push(fdb.collection('vendite').where('giorno','==',day).onSnapshot(function(snap){
@@ -2405,22 +2410,60 @@ function vendStart(){
   vs.unsub.push(fdb.doc('turni/'+sh.id).onSnapshot(function(snap){
     if(snap.exists && snap.data().chiusoIl && vs.shift && vs.shift.id===sh.id && !vs.ending) vendEndedRemotely();
   },function(er){ console.warn('turno:',er&&er.code); }));
+  // il carrello in corso vive anche sul database: se si chiude l'app per sbaglio o si cambia computer, lo si ritrova
+  vs.unsub.push(fdb.doc('carrelli/'+sh.id).onSnapshot(function(snap){
+    if(snap.metadata.hasPendingWrites || (snap.metadata.fromCache && !snap.exists)) return;
+    if(cartJson(vs.cart)!==vs.cartSent) return;                       // modifiche locali non ancora inviate: valgono quelle
+    var rows=snap.exists ? (snap.data().righe||[]) : [], j=cartJson(rows);
+    if(j===vs.cartSent) return;
+    var ae=document.activeElement; if(ae && ae.closest && ae.closest('#vtLines')) return;   // non disturbare chi sta scrivendo una quantità
+    vs.cart=rows.map(function(l){ return {id:l.id,nome:l.nome,codice:l.codice||'',qta:l.qta|0,prezzo:l.prezzo||0,libero:!!l.libero}; }); vs.cartSent=j; vtRender();
+  },function(er){ console.warn('carrello:',er&&er.code); }));
   loadTop();
   vs.tick=setInterval(function(){ var d=isoDay(new Date()); if(d!==vs.day){ vs.day=d; vendStart(); } else if(vs.tab==='foglio') foglioRender(); },20000);
 }
 function vendEndedRemotely(){
-  toast('Il turno è stato chiuso dalla titolare (chiusura della giornata).'); lsSet(shiftKey(),null); vs.shift=null; vs.cart=[]; vendStop(); vendRender();
+  toast('Il turno è stato chiuso dalla titolare (chiusura della giornata).'); lsSet(shiftKey(),null); vs.shift=null; vs.cart=[]; vs.cartSent='[]'; clearTimeout(vs.cartTimer); vendStop(); vendRender();
 }
 $('#vendExit').onclick=function(){ $('#vendOv').classList.remove('show'); vendStop(); };
 $('#vendTabs').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; vs.tab=b.dataset.t; vendRender(); });
 
 /* apertura turno */
+/* turni già aperti oggi (su altri computer): si possono riprendere, col carrello in corso */
+function peekStop(){ vs.pk.forEach(function(f){ try{ f(); }catch(e){} }); vs.pk=[]; }
+function peekStart(){
+  if(vs.pk.length) return; var day=vs.day||isoDay(new Date());
+  vs.pk.push(fdb.collection('turni').where('giorno','==',day).onSnapshot(function(snap){ vs.pkShifts=snap.docs.map(function(d){ var o=d.data({serverTimestamps:'estimate'}); o.id=d.id; return o; }); peekRender(); },function(er){ console.warn('turni aperti:',er&&er.code); }));
+  vs.pk.push(fdb.collection('carrelli').where('giorno','==',day).onSnapshot(function(snap){ vs.pkCarts={}; snap.docs.forEach(function(d){ vs.pkCarts[d.id]=d.data(); }); peekRender(); },function(er){ console.warn('carrelli:',er&&er.code); }));
+}
+function peekRender(){
+  var box=$('#voShifts'); if(!box || vs.shift) return;
+  var open=vs.pkShifts.filter(function(x){ return !x.chiusoIl; });
+  box.innerHTML = open.length ? '<div class="vo-open"><div class="vsec" style="margin-top:0">Turni aperti adesso su altri computer</div>'+open.map(function(x){
+    var c=vs.pkCarts[x.id], rows=(c&&c.righe)||[];
+    return '<div class="vo-sh"><div><b>'+esc(x.staffNome)+'</b> · '+esc(x.postazione)+'<br><span class="hint">'+(rows.length?'Carrello in corso: '+(c.pezzi|0)+(c.pezzi===1?' pezzo':' pezzi')+' · '+money(c.totale)+'<br>'+rows.map(function(l){ return (l.qta|0)+'× '+esc(l.nome); }).join(' · '):'Nessun carrello in corso')+'</span></div>'
+      +'<button type="button" class="btn p" data-join="'+esc(x.id)+'">Apri questo turno</button></div>';
+  }).join('')+'<div class="hint" style="margin-top:6px">Riprendere un turno non cancella niente: le vendite già registrate restano, e il carrello in corso si ritrova qui.</div></div>' : '';
+}
+function joinShift(id){
+  var x=vs.pkShifts.filter(function(o){ return o.id===id && !o.chiusoIl; })[0]; if(!x) return;
+  function go(){
+    var ap=tsDate(x.apertoLocale)||tsDate(x.aperto)||new Date();
+    vs.shift={id:x.id,staffId:x.staffId,staffNome:x.staffNome,postazione:x.postazione,giorno:x.giorno,ruolo:role,aperto:ap.getTime()};
+    lsSet(shiftKey(),vs.shift); vs.cart=[]; vs.cartSent='[]'; vs.tab='cerca'; vs.day=isoDay(new Date()); vendRender(); vendStart();
+  }
+  if(role==='titolare') return go();
+  var m=staff.filter(function(z){ return z.id===x.staffId; })[0];
+  if(!m || !m.pinHash){ toast('Questo turno non si può riprendere da qui.'); return; }
+  askPin(m,go);
+}
+$('#voShifts').addEventListener('click',function(e){ var b=e.target.closest('[data-join]'); if(b) joinShift(b.dataset.join); });
 function renderOpenPanel(){
   var w=whoChoices(); vs.voWho = vs.voWho ? (w.filter(function(x){ return x.id===vs.voWho.id; })[0]||null) : null;
   $('#voWho').innerHTML = w.length ? w.map(function(s){ return '<button type="button" class="chip'+(vs.voWho&&vs.voWho.id===s.id?' sel':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('')
     : '<div class="hint">Nessun dipendente con PIN. La titolare li aggiunge in Impostazioni.</div>';
   if(!$('#voPost').value) $('#voPost').value=lsGet(POST_KEY)||'Cassa 1';
-  $('#voErr').textContent=''; updVo();
+  $('#voErr').textContent=''; updVo(); peekStart(); peekRender();
 }
 function updVo(){ $('#voGo').disabled=!(vs.voWho && $('#voPost').value.trim()); var pk=$('#voPick'); pk.textContent = vs.voWho ? 'Turno di '+vs.voWho.nome : 'Tocca il tuo nome'; pk.classList.toggle('ok',!!vs.voWho); }
 $('#voWho').addEventListener('click',function(e){ var b=e.target.closest('.chip'); if(!b) return; vs.voWho=whoChoices().filter(function(s){ return s.id===b.dataset.id; })[0]||null; Array.prototype.forEach.call(document.querySelectorAll('#voWho .chip'),function(x){ x.classList.toggle('sel',x===b); }); updVo(); });
@@ -2432,7 +2475,7 @@ function vendOpenShift(){
   var rec={staffId:w.id,staffNome:w.nome,postazione:post,giorno:isoDay(now),ruolo:role,aperto:F.serverTimestamp(),apertoLocale:firebase.firestore.Timestamp.fromDate(now),chiusoIl:null};
   var pr=fdb.doc('turni/'+id).set(rec); trackWrite(pr); pr.catch(function(er){ console.warn('turno:',er&&er.code); toast(er&&er.code==='permission-denied'?'Il database non ha accettato il turno: pubblica le regole aggiornate (firestore.rules).':'Turno non registrato.'); });
   vs.shift={id:id,staffId:w.id,staffNome:w.nome,postazione:post,giorno:isoDay(now),ruolo:role,aperto:now.getTime()};
-  lsSet(shiftKey(),vs.shift); lsSet(POST_KEY,post); vs.cart=[]; vs.tab='cerca'; vs.day=isoDay(now); vendRender(); vendStart();
+  lsSet(shiftKey(),vs.shift); lsSet(POST_KEY,post); vs.cart=[]; vs.cartSent='[]'; vs.tab='cerca'; vs.day=isoDay(now); vendRender(); vendStart();
 }
 
 /* ricerca veloce */
@@ -2505,6 +2548,18 @@ function addToCart(p,n){
   else vs.cart.push({id:p.id,nome:p.nome,codice:p.codiceCustom||p.codiceProdotto||p.codiceRivenditore||'',qta:n,prezzo:p.prezzoVendita||0,libero:false});
   vtRender();
 }
+function cartJson(c){ return JSON.stringify((c||[]).map(function(l){ return {id:l.id,nome:l.nome,codice:l.codice||'',qta:l.qta|0,prezzo:l.prezzo||0,libero:!!l.libero}; })); }
+function cartSyncSoon(){
+  if(!vs.shift || cartJson(vs.cart)===vs.cartSent) return;
+  clearTimeout(vs.cartTimer); vs.cartTimer=setTimeout(cartPush,350);
+}
+function cartPush(){
+  vs.cartTimer=null; var sh=vs.shift; if(!sh) return;
+  var j=cartJson(vs.cart), ref=fdb.doc('carrelli/'+sh.id), t=cartTotals(); vs.cartSent=j;
+  var pr = vs.cart.length ? ref.set({turnoId:sh.id,staffNome:sh.staffNome,postazione:sh.postazione,giorno:sh.giorno,righe:JSON.parse(j),pezzi:t.pz,totale:t.tot,aggiornato:firebase.firestore.FieldValue.serverTimestamp()}) : ref.delete();
+  pr.catch(function(er){ console.warn('carrello:',er&&er.code); });
+}
+function cartDrop(sh){ clearTimeout(vs.cartTimer); vs.cartTimer=null; vs.cartSent='[]'; if(sh) fdb.doc('carrelli/'+sh.id).delete().catch(function(){}); }
 function cartTotals(){ var pz=0,tot=0; vs.cart.forEach(function(l){ pz+=l.qta; tot+=l.qta*l.prezzo; }); return {pz:pz,tot:round2(tot)}; }
 function vtRender(){
   var box=$('#vtLines'); if(!box) return;
@@ -2516,6 +2571,7 @@ function vtRender(){
   var t=cartTotals(); $('#vtPieces').textContent=t.pz+(t.pz===1?' pezzo':' pezzi'); $('#vtTotal').textContent=money(t.tot);
   $('#vtGo').disabled=!(vs.cart.length && vs.shift && !vs.seal && !vs.busy);
   $('#vtErr').textContent = vs.seal ? 'La giornata è chiusa: non si possono registrare vendite. Chiedi alla titolare di riaprirla.' : '';
+  cartSyncSoon();
 }
 $('#vtLines').addEventListener('click',function(e){
   var b=e.target.closest('[data-a]'); if(!b||b.tagName==='INPUT') return; var row=b.closest('.vl'), i=+row.dataset.i, l=vs.cart[i]; if(!l) return;
@@ -2597,7 +2653,7 @@ $('#vendEnd').onclick=function(){
   var sh=vs.shift, mine=vs.sales.filter(function(r){ return r.turnoId===sh.id; });
   vs.ending=true;
   var pr=fdb.doc('turni/'+sh.id).update({chiusoIl:firebase.firestore.FieldValue.serverTimestamp()}); trackWrite(pr); pr.catch(function(er){ console.warn('chiusura turno:',er&&er.code); });
-  vs.shift=null; lsSet(shiftKey(),null); vs.cart=[]; vendStop(); vs.ending=false; vendRender();
+  cartDrop(sh); vs.shift=null; lsSet(shiftKey(),null); vs.cart=[]; vendStop(); vs.ending=false; vendRender();
   var ok=mine.filter(function(r){ return !r.annullata; }), pz=0, tot=0; ok.forEach(function(r){ pz+=r.pezzi|0; tot+=r.totale||0; });
   var items=sumByItem(mine);
   $('#sumBody').innerHTML='<div style="font-size:15px;line-height:1.5"><b>'+esc(sh.staffNome)+'</b> · '+esc(sh.postazione)+'<br><span style="color:var(--espresso-2)">'+esc(dayLabel(sh.giorno))+' · dalle '+hhmm(new Date(sh.aperto))+' alle '+hhmm(new Date())+'</span></div>'
@@ -2618,13 +2674,14 @@ function loadTop(){
 }
 
 /* ── Oggi: le vendite in diretta e la chiusura della giornata (titolare) ── */
-var og={day:'',sales:[],shifts:[],seal:null,unsub:[],tick:null};
+var og={day:'',sales:[],shifts:[],carts:{},seal:null,unsub:[],tick:null};
 function openOggi(){ og.day=isoDay(new Date()); $('#oggiOv').classList.add('show'); ogStart(); }
 function ogStop(){ og.unsub.forEach(function(f){ try{ f(); }catch(e){} }); og.unsub=[]; clearInterval(og.tick); }
 function ogStart(){
-  ogStop(); var day=og.day; og.sales=[]; og.shifts=[]; og.seal=null; $('#ogBody').innerHTML='<div class="none">Caricamento…</div>';
+  ogStop(); var day=og.day; og.sales=[]; og.shifts=[]; og.carts={}; og.seal=null; $('#ogBody').innerHTML='<div class="none">Caricamento…</div>';
   og.unsub.push(fdb.collection('vendite').where('giorno','==',day).onSnapshot(function(snap){ og.sales=snap.docs.map(function(d){ var o=d.data({serverTimestamps:'estimate'}); o.id=d.id; return o; }); ogRender(); },function(er){ console.warn('oggi vendite:',er&&er.code); $('#ogBody').innerHTML='<div class="none">Impossibile leggere le vendite. Pubblica le regole aggiornate (firestore.rules).</div>'; }));
   og.unsub.push(fdb.collection('turni').where('giorno','==',day).onSnapshot(function(snap){ og.shifts=snap.docs.map(function(d){ var o=d.data({serverTimestamps:'estimate'}); o.id=d.id; return o; }); ogRender(); },function(er){ console.warn('oggi turni:',er&&er.code); }));
+  og.unsub.push(fdb.collection('carrelli').where('giorno','==',day).onSnapshot(function(snap){ og.carts={}; snap.docs.forEach(function(d){ og.carts[d.id]=d.data(); }); ogRender(); },function(er){ console.warn('oggi carrelli:',er&&er.code); }));
   og.unsub.push(fdb.doc('giornate/'+day).onSnapshot(function(snap){ og.seal=snap.exists?snap.data():null; ogRender(); },function(er){ console.warn('oggi giornata:',er&&er.code); }));
   og.tick=setInterval(ogRender,20000); ogRender();
 }
@@ -2643,6 +2700,12 @@ function ogAgg(){
   });
   return {ok:ok,pz:pz,tot:round2(tot),by:Object.keys(by).map(function(k){ return by[k]; }).sort(function(a,b){ return b.tot-a.tot; }),hours:hours,voided:og.sales.length-ok.length};
 }
+function ogCartsHtml(openSh){
+  var rows=openSh.filter(function(x){ var c=og.carts[x.id]; return c && (c.righe||[]).length; });
+  if(!rows.length) return '';
+  return '<h4>Carrelli in corso (non ancora registrati)</h4><div class="og-feed">'+rows.map(function(x){ var c=og.carts[x.id];
+    return '<div class="vsale"><div class="tm">…</div><div class="it"><b>'+esc(x.staffNome)+'</b> · '+esc(x.postazione)+'<br>'+saleItems(c)+'</div><div class="tt">'+money(c.totale)+'</div><span></span></div>'; }).join('')+'</div><div style="height:16px"></div>';
+}
 function ogRender(){
   if(!$('#oggiOv').classList.contains('show')) return;
   var today=isoDay(new Date()), isToday=og.day===today, A=ogAgg();
@@ -2658,6 +2721,7 @@ function ogRender(){
   var items=sumByItem(og.sales).slice(0,10);
   var feed=og.sales.slice().sort(function(a,b){ return (saleWhen(b)||0)-(saleWhen(a)||0); }).slice(0,100);
   $('#ogBody').innerHTML='<div class="og-kpis"><div class="kpi"><div class="l">Pezzi venduti</div><div class="v">'+fmtN(A.pz)+'</div></div><div class="kpi"><div class="l">Totale</div><div class="v">'+money(A.tot)+'</div></div><div class="kpi"><div class="l">Vendite</div><div class="v">'+A.ok.length+'</div></div><div class="kpi"><div class="l">Annullate</div><div class="v">'+A.voided+'</div></div></div>'
+    +(isToday && !seal ? ogCartsHtml(openSh) : '')
     +'<h4>Per persona e computer</h4>'+(A.by.length?tbl(['Chi','Computer','Vendite','Pezzi','Totale','Ultima'],A.by.map(function(a){ var ago=a.last&&isToday?Math.max(0,Math.round((Date.now()-a.last)/60000)):null; return [esc(a.nome),esc(a.post),String(a.n),fmtN(a.pz),money(round2(a.tot)),a.last?hhmm(a.last)+(ago!=null?' <span style="color:var(--espresso-2)">('+(ago===0?'adesso':ago+' min fa')+')</span>':''):'—']; }),[2,3,4]):'<div class="none">Ancora nessuna vendita.</div>')
     +'<h4>Pezzi per ora</h4><div class="og-hours">'+bars+'</div><div style="height:16px"></div>'
     +'<h4>Più venduti oggi</h4>'+(items.length?tbl(['Articolo','Pezzi','Totale'],items.map(function(a){ return [esc(a.nome),fmtN(a.qta),money(round2(a.tot))]; }),[1,2]):'<div class="none">—</div>')
@@ -2676,7 +2740,7 @@ function ogSealDay(){
   var F=firebase.firestore.FieldValue, b=fdb.batch();
   b.set(fdb.doc('giornate/'+og.day),{chiusa:true,chiusaDa:'Titolare',chiusaIl:F.serverTimestamp(),pezzi:A.pz,totale:A.tot,vendite:A.ok.length,annullate:A.voided,
     perPersona:A.by.map(function(a){ return {nome:a.nome,postazione:a.post,vendite:a.n,pezzi:a.pz,totale:round2(a.tot)}; })});
-  openSh.forEach(function(s){ b.update(fdb.doc('turni/'+s.id),{chiusoIl:F.serverTimestamp()}); });
+  openSh.forEach(function(s){ b.update(fdb.doc('turni/'+s.id),{chiusoIl:F.serverTimestamp()}); b.delete(fdb.doc('carrelli/'+s.id)); });
   commitFast(b).then(function(r){ toast(r.queued?QUEUED_MSG:'Giornata chiusa.'); }).catch(function(er){ toast(er&&er.code==='permission-denied'?'Il database non permette di chiudere la giornata: pubblica le regole aggiornate (firestore.rules).':'Chiusura non riuscita. Riprova.'); });
 }
 function ogReopen(){

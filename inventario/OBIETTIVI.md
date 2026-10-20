@@ -195,3 +195,8 @@ Goal: Federica photographs/uploads a supplier invoice and the app proposes the s
 2. Who is "staff": how many people, and do they each need their own login?
 3. Can an item be split across storage and shop?
 4. Do newspapers/magazines (resa to distributor) belong in this app from day one?
+
+## Batch 13–15 — barcode link, size buttons, live carts (Oct 19–21)
+- DONE (merged, PR 16): barcode search tolerant of 12/13 digits, spaces, dashes; an unknown barcode says so and the owner can "Collega questo codice a un articolo".
+- DONE (merged, PR 17): items named "… – S/M/L/XL" show as one card with a button per size (search + Vendite); a lone size in the search matches whole words only. Kids/baby sizes: waiting for Chuck's example names.
+- BUILT, NOT merged: the cart in progress is also saved per shift (`carrelli/{turnoId}`, needs the updated firestore.rules): survives closing the app; an open shift (with its live cart) can be resumed from "Apri il turno" on any device (staff need that person's PIN, owner none); Oggi shows live carts; sealing the day removes them.
