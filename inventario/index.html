@@ -2448,26 +2448,42 @@ function peekStart(){
   vs.pk.push(fdb.collection('turni').where('giorno','==',day).onSnapshot(function(snap){ vs.pkShifts=snap.docs.map(function(d){ var o=d.data({serverTimestamps:'estimate'}); o.id=d.id; return o; }); peekRender(); },function(er){ console.warn('turni aperti:',er&&er.code); }));
   vs.pk.push(fdb.collection('carrelli').where('giorno','==',day).onSnapshot(function(snap){ vs.pkCarts={}; snap.docs.forEach(function(d){ vs.pkCarts[d.id]=d.data(); }); peekRender(); },function(er){ console.warn('carrelli:',er&&er.code); }));
 }
+// Una persona può avere UN SOLO turno aperto: i doppioni (stesso nome) si raggruppano e si chiudono.
+function shiftStart(x){ var d=tsDate(x.apertoLocale)||tsDate(x.aperto); return d?d.getTime():0; }
+function openShiftsOf(staffId){ return vs.pkShifts.filter(function(x){ return !x.chiusoIl && x.staffId===staffId; }).sort(function(a,b){
+  var ca=(vs.pkCarts[a.id]&&(vs.pkCarts[a.id].righe||[]).length)?1:0, cb=(vs.pkCarts[b.id]&&(vs.pkCarts[b.id].righe||[]).length)?1:0;
+  return (cb-ca) || (shiftStart(b)-shiftStart(a)); });   // prima quello col carrello, poi il più recente
+}
+function closeDupes(keep){
+  var dup=vs.pkShifts.filter(function(x){ return !x.chiusoIl && x.staffId===keep.staffId && x.id!==keep.id; }); if(!dup.length) return;
+  var F=firebase.firestore.FieldValue, b=fdb.batch(); dup.forEach(function(x){ b.update(fdb.doc('turni/'+x.id),{chiusoIl:F.serverTimestamp()}); x.chiusoIl=new Date(); });
+  var pr=b.commit(); trackWrite(pr); pr.catch(function(er){ console.warn('doppioni turno:',er&&er.code); });
+}
+function peekPeople(){
+  var seen={}, out=[]; vs.pkShifts.filter(function(x){ return !x.chiusoIl; }).forEach(function(x){ if(seen[x.staffId]) return; seen[x.staffId]=1; out.push(openShiftsOf(x.staffId)[0]); });
+  return out.filter(Boolean).sort(function(a,b){ return String(a.staffNome).localeCompare(String(b.staffNome),'it'); });
+}
 function peekRender(){
   var box=$('#voShifts'); if(!box || vs.shift) return;
-  var open=vs.pkShifts.filter(function(x){ return !x.chiusoIl; });
+  if(role==='titolare') peekPeople().forEach(closeDupes);   // la titolare ripulisce i turni doppi rimasti aperti
+  var open=peekPeople();
   box.innerHTML = open.length ? '<div class="vo-open"><div class="vsec" style="margin-top:0">Turni aperti adesso su altri computer</div>'+open.map(function(x){
     var c=vs.pkCarts[x.id], rows=(c&&c.righe)||[];
     return '<div class="vo-sh"><div><b>'+esc(x.staffNome)+'</b> · '+esc(x.postazione)+'<br><span class="hint">'+(rows.length?'Carrello in corso: '+(c.pezzi|0)+(c.pezzi===1?' pezzo':' pezzi')+' · '+money(c.totale)+'<br>'+rows.map(function(l){ return (l.qta|0)+'× '+esc(l.nome); }).join(' · '):'Nessun carrello in corso')+'</span></div>'
       +'<button type="button" class="btn p" data-join="'+esc(x.id)+'">Apri questo turno</button></div>';
   }).join('')+'<div class="hint" style="margin-top:6px">Riprendere un turno non cancella niente: le vendite già registrate restano, e il carrello in corso si ritrova qui.</div></div>' : '';
 }
+function takeShift(x){
+  vs.shift={id:x.id,staffId:x.staffId,staffNome:x.staffNome,postazione:x.postazione,giorno:x.giorno,ruolo:role,aperto:(shiftStart(x)||Date.now())};
+  closeDupes(x);
+  lsSet(shiftKey(),vs.shift); vs.cart=[]; vs.cartSent='[]'; vs.tab='cerca'; vs.day=isoDay(new Date()); vendRender(); vendStart();
+}
 function joinShift(id){
   var x=vs.pkShifts.filter(function(o){ return o.id===id && !o.chiusoIl; })[0]; if(!x) return;
-  function go(){
-    var ap=tsDate(x.apertoLocale)||tsDate(x.aperto)||new Date();
-    vs.shift={id:x.id,staffId:x.staffId,staffNome:x.staffNome,postazione:x.postazione,giorno:x.giorno,ruolo:role,aperto:ap.getTime()};
-    lsSet(shiftKey(),vs.shift); vs.cart=[]; vs.cartSent='[]'; vs.tab='cerca'; vs.day=isoDay(new Date()); vendRender(); vendStart();
-  }
-  if(role==='titolare') return go();
+  if(role==='titolare') return takeShift(x);
   var m=staff.filter(function(z){ return z.id===x.staffId; })[0];
   if(!m || !m.pinHash){ toast('Questo turno non si può riprendere da qui.'); return; }
-  askPin(m,go);
+  askPin(m,function(){ takeShift(x); });
 }
 $('#voShifts').addEventListener('click',function(e){ var b=e.target.closest('[data-join]'); if(b) joinShift(b.dataset.join); });
 function renderOpenPanel(){
@@ -2483,6 +2499,8 @@ $('#voPost').addEventListener('input',updVo);
 $('#voGo').onclick=function(){ if(!vs.voWho) return; if(role==='titolare') vendOpenShift(); else askPin(vs.voWho,vendOpenShift); };
 function vendOpenShift(){
   var w=vs.voWho; if(!w) return;
+  var ex=openShiftsOf(w.id)[0];
+  if(ex){ takeShift(ex); toast('Hai già un turno aperto: ripreso, con il suo carrello.'); return; }   // mai due turni aperti per la stessa persona
   var id=fdb.collection('turni').doc().id, post=$('#voPost').value.trim().slice(0,30)||'Cassa', F=firebase.firestore.FieldValue, now=new Date();
   var rec={staffId:w.id,staffNome:w.nome,postazione:post,giorno:isoDay(now),ruolo:role,aperto:F.serverTimestamp(),apertoLocale:firebase.firestore.Timestamp.fromDate(now),chiusoIl:null};
   var pr=fdb.doc('turni/'+id).set(rec); trackWrite(pr); pr.catch(function(er){ console.warn('turno:',er&&er.code); toast(er&&er.code==='permission-denied'?'Il database non ha accettato il turno: pubblica le regole aggiornate (firestore.rules).':'Turno non registrato.'); });
