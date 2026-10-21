@@ -998,13 +998,22 @@ function codeLike(p,t){ var kt=digitsKey(t); if(kt.length<7 || !/^[\d\s.\-]+$/.t
 function matches(p,q){
   var terms=q.split(/\s+/).filter(Boolean);
   var hay=norm([p.nome,p.descrizione,p.categoria,distName(p)].concat(CODE_KEYS.map(function(k){return p[k];})).join(' '));
-  return terms.every(function(t){ return isSizeTok(t) ? hasSizeWord(p,t) : (hay.indexOf(t)>=0 || codeLike(p,t)); });
+  return terms.every(function(t){ return isSizeTok(t,terms) ? hasSizeWord(p,t) : (hay.indexOf(t)>=0 || codeLike(p,t)); });
 }
 // Taglie: «T-shirt whisky nero – S». Una taglia scritta da sola nella ricerca (S, M, L, XL…) vale come parola intera, non come lettera dentro un'altra parola.
 var SIZE_ORDER=['XXS','XS','S','M','L','XL','XXL','XXXL','2XL','3XL','4XL','5XL'];
 var SIZE_RX=/^(.*\S)\s+[–—\-]\s*(XXS|XS|S|M|L|XL|XXL|XXXL|[2-5]XL)\s*$/i;
-function sizeInfo(p){ var m=SIZE_RX.exec(String(p.nome||'').trim()); return m ? {base:m[1].trim(), size:m[2].toUpperCase()} : null; }
-function isSizeTok(t){ return SIZE_ORDER.indexOf(String(t).toUpperCase())>=0; }
+// Taglie bimbo: numeri 0–16, ma solo se il nome dice che è per bambini («… bimbo – 4»), così «Magnete – 2» non diventa una taglia.
+var KID_WORD='bimbo|bimba|bimbi|bambino|bambina|bambini|baby|neonato|neonata|kids?|junior';
+var KID_RX=new RegExp('^(.*\\b(?:'+KID_WORD+')\\b.*?)\\s+(?:[–—\\-]\\s*)?(\\d{1,2})\\s*$','i');
+var KID_TERM=new RegExp('^(?:'+KID_WORD+')$');
+function sizeInfo(p){
+  var n=String(p.nome||'').trim(), m=SIZE_RX.exec(n); if(m) return {base:m[1].trim(), size:m[2].toUpperCase()};
+  m=KID_RX.exec(n); if(m && +m[2]<=16) return {base:m[1].trim(), size:String(+m[2])};
+  return null;
+}
+function sizeKey(si){ return /^\d+$/.test(si.size) ? +si.size : 100+SIZE_ORDER.indexOf(si.size); }
+function isSizeTok(t,all){ return SIZE_ORDER.indexOf(String(t).toUpperCase())>=0 || (/^\d{1,2}$/.test(t) && +t<=16 && !!all && all.some(function(x){ return KID_TERM.test(x); })); }
 function hasSizeWord(p,t){ var si=sizeInfo(p), T=String(t).toUpperCase(); if(si) return si.size===T; return new RegExp('(^|[^a-z0-9])'+norm(t)+'($|[^a-z0-9])').test(norm(p.nome)); }
 function rank(p,q){
   if(CODE_KEYS.some(function(k){ return norm(p[k])===q; }) || codeSame(p,q)) return 0;   // codice esatto
@@ -1029,7 +1038,7 @@ function renderResults(){
     if(g && g.length>=2){
       if(shown[gk]) return '';
       shown[gk]=1;
-      var rows=g.slice().sort(function(a,b){ return SIZE_ORDER.indexOf(sizeInfo(a).size)-SIZE_ORDER.indexOf(sizeInfo(b).size); });
+      var rows=g.slice().sort(function(a,b){ return sizeKey(sizeInfo(a))-sizeKey(sizeInfo(b)); });
       var pr=rows.every(function(x){ return x.prezzoVendita===rows[0].prezzoVendita; }) ? '<div class="gp">'+eur.format(rows[0].prezzoVendita||0)+'</div>' : '';
       return '<div class="resg"><div class="gh"><div><div class="nm">'+esc(si.base)+'</div><div class="codes">'+esc([p.codiceCustom&&'Pers. '+p.codiceCustom, distName(p),'scegli la taglia'].filter(Boolean).join(' · '))+'</div></div>'+pr+'</div>'
         +'<div class="szrow">'+rows.map(function(x){ var n=x.qtaNegozio|0, m=x.qtaMagazzino|0; return '<button type="button" class="szc'+(n+m<=0?' z':'')+'" data-id="'+esc(x.id)+'" aria-label="'+esc(x.nome)+'"><b>'+esc(sizeInfo(x).size)+'</b><span>Neg '+n+' · Mag '+m+'</span></button>'; }).join('')+'</div></div>';
@@ -2549,7 +2558,7 @@ function vsRender(){
       var si=sizeInfo(p), gk=si&&norm(si.base)+'|'+(p.distributoreId||''), g=gk&&vg[gk];
       if(g && g.length>=2){
         if(vseen[gk]) return ''; vseen[gk]=1;
-        var rows=g.slice().sort(function(a,b){ return SIZE_ORDER.indexOf(sizeInfo(a).size)-SIZE_ORDER.indexOf(sizeInfo(b).size); });
+        var rows=g.slice().sort(function(a,b){ return sizeKey(sizeInfo(a))-sizeKey(sizeInfo(b)); });
         var same=rows.every(function(x){ return x.prezzoVendita===rows[0].prezzoVendita; });
         return '<div class="vgrp"><div class="nm">'+esc(si.base)+(same&&rows[0].prezzoVendita>0?' · <b>'+money(rows[0].prezzoVendita)+'</b>':'')+(P.qty>1?' · ×'+P.qty:'')+'</div><div class="szrow">'
           +rows.map(function(x){ var n=x.qtaNegozio|0; return '<button type="button" class="szc'+(n<=0?' z':'')+'" data-id="'+esc(x.id)+'" aria-label="'+esc(x.nome)+'"><b>'+esc(sizeInfo(x).size)+'</b><span>negozio '+n+'</span></button>'; }).join('')+'</div></div>';
