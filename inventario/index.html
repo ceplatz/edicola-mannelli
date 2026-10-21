@@ -1005,16 +1005,18 @@ var SIZE_ORDER=['XXS','XS','S','M','L','XL','XXL','XXXL','2XL','3XL','4XL','5XL'
 var SIZE_RX=/^(.*\S)\s+[–—\-]\s*(XXS|XS|S|M|L|XL|XXL|XXXL|[2-5]XL)\s*$/i;
 // Taglie bimbo: numeri 0–16, ma solo se il nome dice che è per bambini («… bimbo – 4»), così «Magnete – 2» non diventa una taglia.
 var KID_WORD='bimbo|bimba|bimbi|bambino|bambina|bambini|baby|neonato|neonata|kids?|junior';
-var KID_RX=new RegExp('^(.*\\b(?:'+KID_WORD+')\\b.*?)\\s+(?:[–—\\-]\\s*)?(\\d{1,2})\\s*$','i');
+var KID_RX=new RegExp('^(.*\\b(?:'+KID_WORD+')\\b.*?)\\s+(?:[–—\\-]\\s*)?(\\d{1,2}(?:\\s*[–—\\-]\\s*\\d{1,2})?)\\s*$','i');
 var KID_TERM=new RegExp('^(?:'+KID_WORD+')$');
 function sizeInfo(p){
   var n=String(p.nome||'').trim(), m=SIZE_RX.exec(n); if(m) return {base:m[1].trim(), size:m[2].toUpperCase()};
-  m=KID_RX.exec(n); if(m && +m[2]<=16) return {base:m[1].trim(), size:String(+m[2])};
+  m=KID_RX.exec(n); if(m){ var pr=m[2].split(/[–—\-]/).map(function(x){ return +x; }); if(pr.every(function(x){ return x<=16; })) return {base:m[1].trim(), size:pr.join('-')}; }   // «4» oppure «3-4»
   return null;
 }
-function sizeKey(si){ return /^\d+$/.test(si.size) ? +si.size : 100+SIZE_ORDER.indexOf(si.size); }
-function isSizeTok(t,all){ return SIZE_ORDER.indexOf(String(t).toUpperCase())>=0 || (/^\d{1,2}$/.test(t) && +t<=16 && !!all && all.some(function(x){ return KID_TERM.test(x); })); }
-function hasSizeWord(p,t){ var si=sizeInfo(p), T=String(t).toUpperCase(); if(si) return si.size===T; return new RegExp('(^|[^a-z0-9])'+norm(t)+'($|[^a-z0-9])').test(norm(p.nome)); }
+function sizeKey(si){ return /^\d+(-\d+)?$/.test(si.size) ? parseInt(si.size,10)+(si.size.indexOf('-')>0?0.5:0) : 100+SIZE_ORDER.indexOf(si.size); }
+// un numero cercato («3») trova anche le fasce che lo contengono come inizio o fine («3-4»)
+function sizeEq(si,t){ var T=String(t).toUpperCase().replace(/[–—]/g,'-'); if(si.size===T) return true; return /^\d+(-\d+)?$/.test(si.size) && /^\d{1,2}$/.test(T) && si.size.split('-').some(function(x){ return +x===+T; }); }
+function isSizeTok(t,all){ return SIZE_ORDER.indexOf(String(t).toUpperCase())>=0 || (/^\d{1,2}([–—\-]\d{1,2})?$/.test(t) && !!all && all.some(function(x){ return KID_TERM.test(x); })); }
+function hasSizeWord(p,t){ var si=sizeInfo(p); if(si) return sizeEq(si,t); return new RegExp('(^|[^a-z0-9])'+norm(t)+'($|[^a-z0-9])').test(norm(p.nome)); }
 function rank(p,q){
   if(CODE_KEYS.some(function(k){ return norm(p[k])===q; }) || codeSame(p,q)) return 0;   // codice esatto
   if(norm(p.nome).indexOf(q)===0) return 1;
