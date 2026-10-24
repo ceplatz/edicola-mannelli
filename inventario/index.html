@@ -394,7 +394,22 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 .hrow .hs{font-size:12px;color:var(--espresso-2)}
 #fvFiles img{max-width:100%;border:1px solid var(--line);border-radius:10px;margin:6px 0;display:block}
 @media (max-width:640px){.bars .bar{grid-template-columns:90px 1fr 70px}}
+#lblPrint{display:none}
+.btn.mini{padding:0 12px;height:46px;font-size:14px;flex-shrink:0}
+.lblprev{display:flex;justify-content:center;padding:14px;background:var(--sand-2);border:1.5px dashed var(--line);border-radius:14px;overflow:hidden}
+.lbl{box-sizing:border-box;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;padding:1.2mm 1.5mm;display:flex;flex-direction:column;overflow:hidden;border:1px solid #ddd}
+.lbl .ln{font-weight:700;font-size:9pt;line-height:1.1;max-height:2.3em;overflow:hidden;display:flex;justify-content:space-between;gap:2mm}
+.lbl .ln span{overflow:hidden}
+.lbl .lp{font-weight:700;font-size:10pt;white-space:nowrap}
+.lbl svg{flex:1;min-height:0;width:100%;display:block}
+.lblopts{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin:12px 0 6px}
+.lblopts label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:700;color:var(--espresso-2)}
+.lblopts label.chk{flex-direction:row;align-items:center;gap:6px;padding-bottom:12px;font-size:14px}
+.lblopts select,.lblopts input[type=text],.lblopts input:not([type]){padding:10px;border:1.5px solid var(--line);border-radius:10px;font-size:16px}
 @media print{
+  body.printing-lbl > *{display:none !important}
+  body.printing-lbl > #lblPrint{display:block !important}
+  body.printing-lbl #lblPrint .lbl{border:none;page-break-after:always;break-after:page}
   body.printing-rep > *, body.printing-inv > *{display:none !important}
   body.printing-rep > #repOv, body.printing-inv > #repOv{display:block !important;position:static;background:none}
   body.printing-rep .sheet.rep, body.printing-inv .sheet.rep{max-width:none;width:auto;max-height:none;overflow:visible;box-shadow:none;border-radius:0;background:#fff;padding:0;animation:none}
@@ -520,7 +535,8 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
     <div class="row2">
       <div><label>Codice personalizzato</label><input name="codiceCustom" maxlength="40"></div>
       <div><label>Codice a barre</label>
-        <div class="with-scan"><input name="barcode" inputmode="numeric" maxlength="40"><button type="button" class="icon-btn" id="scanForm" aria-label="Scansiona">📷</button></div>
+        <div class="with-scan"><input name="barcode" inputmode="numeric" maxlength="40"><button type="button" class="icon-btn" id="scanForm" aria-label="Scansiona">📷</button><button type="button" class="btn mini" id="genBc" title="Crea un codice a barre nuovo per questo articolo">Genera</button><button type="button" class="icon-btn" id="prtBc" aria-label="Stampa etichetta" title="Stampa etichetta">🖨</button></div>
+        <div class="hint" id="bcHint" style="margin-top:4px"></div>
       </div>
     </div>
     <div class="row2">
@@ -841,6 +857,20 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <video id="scanVideo" playsinline muted></video>
   <div class="frame"></div>
 </div>
+<!-- Etichetta con codice a barre (titolare) -->
+<div class="ov" id="lblOv" style="z-index:5800"><div class="sheet" style="max-width:520px">
+  <h3>🖨 Etichetta</h3>
+  <div id="lblPrev" class="lblprev"></div>
+  <div id="lblMsg" class="hint" style="margin:6px 0 0"></div>
+  <div class="lblopts">
+    <label>Quante etichette<input id="lblN" inputmode="numeric" value="1" style="width:90px"></label>
+    <label>Misura<select id="lblSize"><option value="50x30">50 × 30 mm</option><option value="40x30">40 × 30 mm</option><option value="60x40">60 × 40 mm</option><option value="30x20">30 × 20 mm</option></select></label>
+    <label class="chk"><input type="checkbox" id="lblPrice" checked> Mostra il prezzo</label>
+  </div>
+  <div class="hint">Si apre la finestra di stampa del computer: scegli la stampante per etichette e, se serve, la stessa misura della carta.</div>
+  <div class="acts"><button type="button" class="btn" id="lblCancel">Chiudi</button><button type="button" class="btn p" id="lblGo">Stampa</button></div>
+</div></div>
+<div id="lblPrint"></div>
 <div id="toast"></div>
 
 <script>
@@ -1152,7 +1182,7 @@ function openView(id){
    +'<div class="res" style="cursor:default;border:none;background:none;padding:0"><div class="pr" style="font-size:30px">'+eur.format(p.prezzoVendita||0)+'</div></div>'
    +'<div class="bigqty"><div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">In negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">In magazzino<b>'+(p.qtaMagazzino|0)+'</b></div></div>'
    +'<dl class="det">'+rows+'</dl><div id="costRow"></div><div id="histMov"></div><div id="histRow"></div>'
-   +'<div class="acts">'+(role==='titolare'?'<button class="btn" id="editBtn">Modifica</button><button class="btn" id="carBtn">＋ Carico</button>':'')+'<button class="btn" id="moveBtn">Sposta</button><button class="btn p" id="closeView">Chiudi</button></div>';
+   +'<div class="acts">'+(role==='titolare'?'<button class="btn" id="editBtn">Modifica</button><button class="btn" id="carBtn">＋ Carico</button>'+(eanModules(p.barcode)?'<button class="btn" id="lblBtn">🖨 Etichetta</button>':''):'')+'<button class="btn" id="moveBtn">Sposta</button><button class="btn p" id="closeView">Chiudi</button></div>';
   $('#viewOv').classList.add('show');
   viewingId=id;
   if(p.miniatura) fdb.doc('foto/'+id).get().then(function(d){ var im=$('#viewPhoto'); if(viewingId===id && d.exists && im) im.src=d.data().img; }).catch(function(){});
@@ -1170,6 +1200,7 @@ function openView(id){
     }).catch(function(){});
     $('#editBtn').onclick=function(){ $('#viewOv').classList.remove('show'); openForm(id); };
     $('#carBtn').onclick=function(){ openCarico(p); };
+    if($('#lblBtn')) $('#lblBtn').onclick=function(){ openLabel({nome:p.nome,prezzo:p.prezzoVendita,barcode:p.barcode}); };
     histOpen=false; loadProdHistory(id);
     fdb.doc('prodotti/'+id+'/privato/costo').get().then(function(d){
       var c=d.exists?d.data().prezzoAcquisto:null;
@@ -1255,11 +1286,12 @@ function openForm(id){
   $('#qtyHint').textContent = id ? 'Per aggiungere pezzi appena acquistati usa «＋ Carico» nella scheda dell\'articolo: resta registrato quando e quanti. Cambiando qui un numero, viene registrata una «correzione».'
                                  : 'Le quantità inserite qui vengono registrate come primo carico, con data e ora.';
   if(id) fdb.doc('prodotti/'+id+'/privato/costo').get().then(function(d){ if(d.exists && editingId===id) pf.prezzoAcquisto.value=fmtIn(d.data().prezzoAcquisto); }).catch(function(){});
+  $('#bcHint').textContent=''; bcBtns();
   $('#formOv').classList.add('show'); setTimeout(function(){ pf.nome.focus(); },50);
 }
 pf.daRicontare.addEventListener('change',function(){ pf.ricontareNota.classList.toggle('hidden',!this.checked); });
 $('#formCancel').onclick=function(){ $('#formOv').classList.remove('show'); };
-$('#scanForm').onclick=function(){ scan().then(function(c){ if(c) pf.barcode.value=c; }); };
+$('#scanForm').onclick=function(){ scan().then(function(c){ if(c){ pf.barcode.value=c; bcBtns(); } }); };
 $('#delBtn').onclick=function(){
   var p=byId[editingId]; if(!p || !confirm('Eliminare «'+p.nome+'»? L\'operazione non si può annullare.')) return;
   var b=fdb.batch(); b.delete(fdb.doc('prodotti/'+editingId+'/privato/costo')); b.delete(fdb.doc('foto/'+editingId)); b.delete(fdb.doc('prodotti/'+editingId));
@@ -1313,6 +1345,84 @@ pf.addEventListener('submit',function(e){
   commitFast(b).then(function(r){ sv.disabled=false; $('#formOv').classList.remove('show'); toast(r.queued?QUEUED_MSG:(wasEdit?'Prodotto aggiornato.':'Prodotto aggiunto.')); })
     .catch(function(er){ sv.disabled=false; console.warn(er.code); err.textContent = er.code==='permission-denied' ? 'Permesso negato dalle regole del database.' : 'Salvataggio non riuscito. Controlla la connessione.'; });
 });
+
+/* ── Codici a barre interni + etichette ── */
+// EAN-13 (gli stessi 13 numeri li legge qualsiasi lettore). I codici che iniziano per 20 sono riservati dallo standard all'uso interno del negozio.
+var EAN_L=['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+var EAN_G=['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+var EAN_R=['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+var EAN_P=['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+function eanCheck(d){ var sum=0, n=d.length; for(var i=0;i<n;i++){ var v=+d.charAt(n-1-i); sum+=v*(i%2===0?3:1); } return (10-sum%10)%10; }   // d = cifre SENZA l'ultima
+function newInternalBarcode(){
+  var max=0; products.forEach(function(p){ var b=String(p.barcode||'').replace(/\D/g,''); if(b.length===13 && b.slice(0,2)==='20'){ var n=parseInt(b.slice(2,12),10); if(n>max) max=n; } });
+  var core='20'+('0000000000'+(max+1)).slice(-10);
+  return core+eanCheck(core);
+}
+function eanModules(code){      // code: 13, 12 (UPC-A) o 8 cifre → stringa di moduli 0/1, oppure null
+  var d=String(code||'').replace(/\s+/g,''); if(!/^\d+$/.test(d)) return null;
+  if(d.length===12) d='0'+d;
+  var m='101', i;
+  if(d.length===13){
+    var par=EAN_P[+d.charAt(0)];
+    for(i=1;i<=6;i++) m+=(par.charAt(i-1)==='L'?EAN_L:EAN_G)[+d.charAt(i)];
+    m+='01010';
+    for(i=7;i<=12;i++) m+=EAN_R[+d.charAt(i)];
+  } else if(d.length===8){
+    for(i=0;i<4;i++) m+=EAN_L[+d.charAt(i)];
+    m+='01010';
+    for(i=4;i<8;i++) m+=EAN_R[+d.charAt(i)];
+  } else return null;
+  return m+'101';
+}
+function eanSvg(code){
+  var d=String(code||'').replace(/\s+/g,''), m=eanModules(d); if(!m) return '';
+  var q=9, W=m.length+2*q, rects='', i=0;
+  while(i<m.length){ if(m.charAt(i)==='1'){ var j=i; while(j<m.length && m.charAt(j)==='1') j++; rects+='<rect x="'+(q+i)+'" y="0" width="'+(j-i)+'" height="52" fill="#000"/>'; i=j; } else i++; }
+  var txt = d.length===8 ? d : (d.length===12?'0'+d:d);
+  return '<svg viewBox="0 0 '+W+' 62" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Codice a barre '+esc(txt)+'">'+rects
+    +'<text x="'+(W/2)+'" y="60" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="9" letter-spacing="1.2" fill="#000">'+esc(txt)+'</text></svg>';
+}
+var lbl=null;
+function labelHtml(d,size,showPrice){
+  var wh=size.split('x'), svg=eanSvg(d.barcode);
+  return '<div class="lbl" style="width:'+wh[0]+'mm;height:'+wh[1]+'mm"><div class="ln"><span>'+esc(d.nome||'')+'</span>'+(showPrice&&d.prezzo!=null&&d.prezzo>=0?'<b class="lp">'+eur.format(d.prezzo)+'</b>':'')+'</div>'+svg+'</div>';
+}
+function lblRender(){
+  var size=$('#lblSize').value, sp=$('#lblPrice').checked, ok=!!eanModules(lbl.barcode);
+  $('#lblPrev').innerHTML = ok ? '<div style="zoom:2">'+labelHtml(lbl,size,sp)+'</div>' : '';
+  $('#lblMsg').textContent = ok ? '' : 'Questo codice a barre non si può stampare come etichetta (servono 8, 12 o 13 cifre). Usa «Genera» per crearne uno nuovo.';
+  $('#lblGo').disabled=!ok;
+}
+function openLabel(d){
+  lbl=d; try{ var sz=localStorage.getItem('edicola.lblSize'); if(sz) $('#lblSize').value=sz; var pr=localStorage.getItem('edicola.lblPrice'); if(pr!==null) $('#lblPrice').checked=pr==='1'; }catch(e){}
+  $('#lblN').value='1'; lblRender(); $('#lblOv').classList.add('show');
+}
+$('#lblSize').addEventListener('change',function(){ try{ localStorage.setItem('edicola.lblSize',this.value); }catch(e){} lblRender(); });
+$('#lblPrice').addEventListener('change',function(){ try{ localStorage.setItem('edicola.lblPrice',this.checked?'1':'0'); }catch(e){} lblRender(); });
+$('#lblCancel').onclick=function(){ $('#lblOv').classList.remove('show'); };
+$('#lblGo').onclick=function(){
+  if(!lbl || !eanModules(lbl.barcode)) return;
+  var n=Math.max(1,Math.min(99,parseInt($('#lblN').value,10)||1)), size=$('#lblSize').value, wh=size.split('x'), one=labelHtml(lbl,size,$('#lblPrice').checked), h='';
+  for(var i=0;i<n;i++) h+=one;
+  $('#lblPrint').innerHTML=h;
+  var st=document.createElement('style'); st.id='lblPage'; st.textContent='@page{size:'+wh[0]+'mm '+wh[1]+'mm;margin:0}'; document.head.appendChild(st);
+  document.body.classList.add('printing-lbl'); setTimeout(function(){ window.print(); },60);
+};
+window.addEventListener('afterprint',function(){ document.body.classList.remove('printing-lbl'); var st=$('#lblPage'); if(st) st.remove(); $('#lblPrint').innerHTML=''; });
+// pulsanti nella scheda articolo (modifica)
+function bcBtns(){
+  var has=!!pf.barcode.value.trim();
+  $('#genBc').classList.toggle('hidden',has); $('#prtBc').classList.toggle('hidden',!has);
+}
+pf.barcode.addEventListener('input',bcBtns);
+$('#genBc').onclick=function(){
+  var c=newInternalBarcode(); pf.barcode.value=c; bcBtns();
+  $('#bcHint').textContent='Codice creato: '+c+'. Salva l\'articolo, poi stampa l\'etichetta con 🖨 e attaccala al prodotto.';
+};
+$('#prtBc').onclick=function(){
+  var pv=num(pf.prezzoVendita.value);
+  openLabel({nome:pf.nome.value.trim(),prezzo:pv,barcode:pf.barcode.value.trim()});
+};
 
 /* ── Scanner codice a barre ── */
 var ZXING='https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js';
