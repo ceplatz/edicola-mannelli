@@ -1007,8 +1007,13 @@ var SIZE_RX=/^(.*\S)\s+[–—\-]\s*(XXS|XS|S|M|L|XL|XXL|XXXL|[2-5]XL)\s*$/i;
 var KID_WORD='bimbo|bimba|bimbi|bambino|bambina|bambini|baby|neonato|neonata|kids?|junior';
 var KID_RX=new RegExp('^(.*\\b(?:'+KID_WORD+')\\b.*?)\\s+(?:[–—\\-]\\s*)?(\\d{1,2}(?:\\s*[–—\\-]\\s*\\d{1,2})?)\\s*$','i');
 var KID_TERM=new RegExp('^(?:'+KID_WORD+')$');
+// Taglia scritta senza trattino («Felpa ricamata blu 3XL»): vale per XS/XL/XXL/3XL…; S/M/L da sole senza trattino solo se esiste già un gruppo con lo stesso nome (vedi isGroup).
+var SIZE_RX2=/^(.*\S)\s+(XXS|XS|XL|XXL|XXXL|[2-5]XL)\s*$/i, SIZE_RX3=/^(.*\S)\s+(S|M|L)\s*$/i;
+function isGroup(g){ return g.length>=2 && g.some(function(x){ return !sizeInfo(x).loose; }); }
 function sizeInfo(p){
   var n=String(p.nome||'').trim(), m=SIZE_RX.exec(n); if(m) return {base:m[1].trim(), size:m[2].toUpperCase()};
+  m=SIZE_RX2.exec(n); if(m) return {base:m[1].trim(), size:m[2].toUpperCase()};
+  m=SIZE_RX3.exec(n); if(m) return {base:m[1].trim(), size:m[2].toUpperCase(), loose:true};
   m=KID_RX.exec(n); if(m){ var pr=m[2].split(/[–—\-]/).map(function(x){ return +x; }); if(pr.every(function(x){ return x<=16; })) return {base:m[1].trim(), size:pr.join('-')}; }   // «4» oppure «3-4»
   return null;
 }
@@ -1037,7 +1042,7 @@ function renderResults(){
   var shown={};
   $('#results').innerHTML = list.length ? list.map(function(p){
     var si=sizeInfo(p), gk=si&&norm(si.base)+'|'+(p.distributoreId||''), g=gk&&groups[gk];
-    if(g && g.length>=2){
+    if(g && isGroup(g)){
       if(shown[gk]) return '';
       shown[gk]=1;
       var rows=g.slice().sort(function(a,b){ return sizeKey(sizeInfo(a))-sizeKey(sizeInfo(b)); });
@@ -2558,7 +2563,7 @@ function vsRender(){
   list.forEach(function(p){ var si=sizeInfo(p); if(si){ var k=norm(si.base)+'|'+(p.distributoreId||''); (vg[k]=vg[k]||[]).push(p); } });
   $('#vsRes').innerHTML = shown.length ? '<div class="vtiles">'+shown.map(function(p){
       var si=sizeInfo(p), gk=si&&norm(si.base)+'|'+(p.distributoreId||''), g=gk&&vg[gk];
-      if(g && g.length>=2){
+      if(g && isGroup(g)){
         if(vseen[gk]) return ''; vseen[gk]=1;
         var rows=g.slice().sort(function(a,b){ return sizeKey(sizeInfo(a))-sizeKey(sizeInfo(b)); });
         var same=rows.every(function(x){ return x.prezzoVendita===rows[0].prezzoVendita; });
