@@ -127,6 +127,17 @@ service cloud.firestore {
       allow delete: if titolare() || personale();
     }
 
+    // Da rifornire: per ogni articolo venduto (magliette), quanti pezzi vanno ancora riportati dal magazzino al negozio.
+    // Un documento per articolo (stesso id del prodotto); lo aggiorna chi vende o sposta, sparisce quando è tutto rifornito.
+    match /rifornimenti/{id} {
+      allow read: if titolare() || personale();
+      allow create, update: if (titolare() || personale())
+        && request.resource.data.keys().hasOnly(['nome', 'qta', 'aggiornato'])
+        && request.resource.data.nome is string && request.resource.data.nome.size() <= 160
+        && request.resource.data.qta is int && request.resource.data.qta >= 0 && request.resource.data.qta <= 100000;
+      allow delete: if titolare() || personale();
+    }
+
     // Vendite: un documento per scontrino (righe con quantità e prezzo del momento). Mai modificate:
     // si possono solo ANNULLARE (resta visibile, segnata come annullata) - il personale entro 10 minuti, la titolare sempre.
     match /vendite/{id} {
