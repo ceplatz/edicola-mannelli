@@ -117,6 +117,12 @@ main{width:100%;max-width:1000px;margin:0 auto;padding:18px 20px 40px}
 .tile .nm{font-weight:700;font-size:15px;line-height:1.2}
 .tile .ds{font-size:12px;color:var(--espresso-2);line-height:1.25}
 .tile .soon{position:absolute;top:10px;right:10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--gold);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
+.tile .tbadge{position:absolute;top:10px;right:10px;min-width:24px;height:24px;padding:0 7px;border-radius:999px;background:var(--coral);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.rifrow{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);margin:8px 0}
+.rifrow .rf-i{flex:1;min-width:0}
+.rifrow .nm{font-weight:700;font-size:16px}
+.rifrow .rf-q{font-size:13px;color:var(--espresso-2);margin-top:2px}
+.rifrow .rf-q b{color:var(--espresso)}
 .tile .own{position:absolute;top:10px;right:10px;font-size:10px;color:var(--espresso-2)}
 
 h2.sec{font-family:'Cormorant Garamond',serif;font-size:24px;margin:26px 0 10px}
@@ -552,7 +558,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 </div></div>
 
 <!-- Sposta -->
-<div class="ov" id="moveOv"><div class="sheet">
+<div class="ov" id="moveOv" style="z-index:5400"><div class="sheet">
   <h3>Sposta merce</h3>
   <div id="mvPick">
     <label>Prodotto</label>
@@ -690,6 +696,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
     <span class="vend-lock hidden" id="vendLock">🔒 Giornata chiusa</span>
     <button type="button" class="sync ok" aria-live="polite"><i></i><span>Sincronizzato</span></button>
     <div class="seg vend-tabs hidden" id="vendTabs"><button type="button" data-t="cerca" class="on">Vendita</button><button type="button" data-t="foglio">Il mio foglio</button></div>
+    <button type="button" class="btn hidden" id="vendRif">📦</button>
     <button type="button" class="btn hidden" id="vendLeave">Cambia persona</button>
     <button type="button" class="btn hidden" id="vendEnd">Chiudi turno</button>
     <button type="button" class="btn p" id="vendExit">Esci</button>
@@ -734,9 +741,18 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 </div></div>
 
 <!-- Vendite: riepilogo del turno -->
+<!-- Da rifornire: pezzi venduti da riportare dal magazzino al negozio -->
+<div class="ov" id="rifOv" style="z-index:5300"><div class="sheet wide">
+  <h3>📦 Da rifornire</h3>
+  <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette vendute: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce.</div>
+  <div id="rifBody"></div>
+  <div class="acts"><button type="button" class="btn p" id="rifClose">Chiudi</button></div>
+</div></div>
+
 <div class="ov" id="sumOv" style="z-index:5600"><div class="sheet wide">
   <h3>Turno chiuso</h3>
   <div id="sumBody"></div>
+  <div id="sumRif"></div>
   <div class="acts"><button type="button" class="btn" id="sumPrint">🖨 Stampa</button><button type="button" class="btn p" id="sumClose">Fatto</button></div>
 </div></div>
 
@@ -864,7 +880,7 @@ setTimeout(function(){ $('#splash').classList.add('hide'); }, viridianMs + 1300)
 setTimeout(function(){ $('#splash').style.display='none'; }, viridianMs + 1900);
 
 /* ── Firebase ── */
-var auth=null, fdb=null, role=null, products=[], unsub=null, byId={};
+var auth=null, fdb=null, role=null, products=[], unsub=null, byId={}, rif={}, unsubRif=null;
 function fbReady(){ return typeof firebase!=='undefined'; }
 function fbInit(){
   if(!fbReady()) return false;
@@ -948,7 +964,7 @@ function onUser(user){
   $('#whoRole').textContent = role==='titolare' ? 'Titolare' : 'Personale';
   $('#loginOverlay').classList.add('hidden'); $('#app').classList.remove('hidden');
   $('#loginBtn').disabled=false; $('#loginBtn').textContent='Entra';
-  buildTiles(); startDistributori(); startProducts(); startStaff(); checkPending();
+  buildTiles(); startDistributori(); startProducts(); startRif(); startStaff(); checkPending();
 }
 
 /* ── Home: tessere ── */
@@ -957,6 +973,7 @@ function buildTiles(){
   if(role==='titolare') t.push({e:'➕',n:'Nuovo prodotto',d:'Aggiungi un articolo',act:function(){ openForm(null); }});
   t.push({e:'🛒',n:'Vendite',d:'Registra cosa si vende, per turno',act:openVend});
   t.push({e:'🔁',n:'Sposta',d:'Tra magazzino e negozio',act:function(){ openMove(null); }});
+  t.push({e:'📦',n:'Da rifornire',d:'Magliette vendute da riportare in negozio',k:'rif',act:openRif});
   if(role==='titolare'){
     t.push({e:'📋',n:'Registro movimenti',d:'Chi ha spostato cosa e quando',act:openLog});
     t.push({e:'📈',n:'Oggi',d:'Vendite in diretta e chiusura giornata',act:openOggi});
@@ -968,6 +985,7 @@ function buildTiles(){
   t.forEach(function(x){
     var b=document.createElement('button'); b.className='tile'; b.type='button';
     b.innerHTML='<span class="emoji">'+x.e+'</span><span class="nm">'+esc(x.n)+'</span><span class="ds">'+esc(x.d)+'</span>'+(x.soon?'<span class="soon">Presto</span>':'');
+    if(x.k){ b.dataset.k=x.k; }
     b.onclick = x.act || function(){ toast('«'+x.n+'» arriverà presto.'); };
     box.appendChild(b);
   });
@@ -1032,11 +1050,12 @@ function renderResults(){
   var wrap=$('#resultsWrap');
   if(!q && !df && !cf){ wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
-  // La barra di ricerca ha la precedenza assoluta: se c'è scritto (o scansionato) qualcosa, si cerca in TUTTO l'archivio e i filtri distributore/categoria non contano.
-  var list=products.filter(function(p){ return q ? matches(p,q) : ((!df || p.distributoreId===df) && (!cf || p.categoria===cf)); }).sort(function(a,b){
+  // Un codice a barre ha la precedenza assoluta (si cerca in TUTTO l'archivio); qualsiasi altra ricerca vale dentro i filtri distributore/categoria scelti.
+  var isBc=!!q && looksLikeBarcode($('#q').value);
+  var list=products.filter(function(p){ return isBc ? matches(p,q) : ((!df || p.distributoreId===df) && (!cf || p.categoria===cf) && (!q || matches(p,q))); }).sort(function(a,b){
     return (q?rank(a,q)-rank(b,q):0) || String(a.nome).localeCompare(String(b.nome),'it');
   });
-  $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati')+((q&&(df||cf))?' · la ricerca vale su tutto: i filtri non contano':'') : '';
+  $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati')+((isBc&&(df||cf))?' · il codice a barre cerca in tutto: i filtri non contano':'') : '';
   var groups={};
   list.forEach(function(p){ var si=sizeInfo(p); if(si){ var k=norm(si.base)+'|'+(p.distributoreId||''); (groups[k]=groups[k]||[]).push(p); } });
   var shown={};
@@ -1054,19 +1073,21 @@ function renderResults(){
     return '<button class="res" data-id="'+esc(p.id)+'">'+(p.miniatura?'<img class="thumb" alt="" src="'+esc(p.miniatura)+'">':'')+'<div class="info"><div class="nm">'+esc(p.nome)+'</div><div class="codes">'+esc(codes||'Nessun codice')+'</div>'+tagsHtml(p)+'</div>'
       +'<div class="qty"><div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">Negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">Magazzino<b>'+(p.qtaMagazzino|0)+'</b></div></div>'
       +'<div class="pr">'+eur.format(p.prezzoVendita||0)+'</div></button>';
-  }).join('') : '<div class="empty">'+emptyHtml(q)+'</div>';
+  }).join('') : '<div class="empty">'+emptyHtml(q,!!(df||cf))+'</div>';
 }
 // Un numero lungo senza risultati è quasi sempre un codice a barre che nessun articolo ha ancora: spieghiamolo e (titolare) offriamo di collegarlo.
 function looksLikeBarcode(q){ return /^[\d\s.\-]+$/.test(q) && String(q).replace(/\D/g,'').length>=7; }
-function emptyHtml(q){
+function emptyHtml(q,filtered){
   if(!products.length) return 'Ancora nessun prodotto.'+(role==='titolare'?' Usa «Nuovo prodotto» per iniziare.':'');
   if(q && looksLikeBarcode(q)){
     return '<b>Nessun articolo ha questo codice a barre.</b><br><span style="font-size:14px">Non è ancora stato collegato a nessun articolo.</span>'
       +(role==='titolare' ? '<br><button type="button" class="btn p" id="lnkOpen" style="margin-top:14px">🔗 Collega questo codice a un articolo</button>' : '<br><span style="font-size:14px">Chiedi alla titolare di collegarlo.</span>');
   }
+  if(q && filtered) return 'Nessun risultato con i filtri scelti (distributore / categoria).<br><button type="button" class="btn" id="clearFilters" style="margin-top:14px">Togli i filtri e cerca in tutto</button>';
   return 'Nessun risultato.';
 }
 $('#q').addEventListener('input',renderResults);
+$('#results').addEventListener('click',function(e){ if(e.target.id==='clearFilters'){ $('#distFilter').value=''; fillCatSelects(); $('#catFilter').value=''; renderResults(); } });
 $('#distFilter').addEventListener('change',function(){ fillCatSelects(); renderResults(); });
 $('#catFilter').addEventListener('change',renderResults);
 $('#results').addEventListener('click',function(e){ var b=e.target.closest('.res,.szc'); if(b) openView(b.dataset.id); });
@@ -1454,6 +1475,57 @@ $('#staffAdd').addEventListener('submit',function(e){
     .catch(function(er){ err.textContent = er&&er.message==='nocrypto' ? 'Questo browser non supporta la cifratura del PIN (serve una connessione HTTPS).' : 'Non salvato. Controlla la connessione.'; });
 });
 
+/* ── Da rifornire: quello che si vende (magliette, per ora) va riportato dal magazzino al negozio ── */
+function isRiforn(p){ return !!p && /t-?shirt|maglia|maglie/i.test(String(p.categoria||'')+' '+String(p.nome||'')); }
+function startRif(){
+  if(unsubRif) unsubRif();
+  unsubRif=fdb.collection('rifornimenti').onSnapshot(function(snap){
+    rif={}; snap.docs.forEach(function(d){ var o=d.data(); if((o.qta|0)>0) rif[d.id]={nome:o.nome||'',qta:o.qta|0}; });
+    rifUi();
+  },function(er){ console.warn('rifornimenti:',er&&er.code); });
+}
+function rifTotal(){ var n=0; Object.keys(rif).forEach(function(k){ n+=rif[k].qta; }); return n; }
+function rifUi(){
+  var t=document.querySelector('#tiles .tile[data-k="rif"]');
+  if(t){ var b=t.querySelector('.tbadge'), n=rifTotal(); if(n&&!b){ b=document.createElement('span'); b.className='tbadge'; t.appendChild(b); } if(b){ if(n) b.textContent=n; else b.remove(); } }
+  var vb=$('#vendRif'), nn=rifTotal(); vb.textContent='📦 Da rifornire: '+nn; vb.classList.toggle('hidden',!(nn && vs.shift));
+  if($('#rifOv').classList.contains('show')) rifRender();
+}
+// Segnato DOPO che la vendita è andata a buon fine (e separato): se le regole del database non sono aggiornate, la vendita non ne risente.
+function rifAdd(righe){
+  var agg={}; (righe||[]).forEach(function(l){ var p=l.id&&byId[l.id]; if(p && !l.libero && isRiforn(p)){ (agg[l.id]=agg[l.id]||{nome:p.nome,n:0}).n+=l.qta|0; } });
+  var ids=Object.keys(agg); if(!ids.length) return;
+  var F=firebase.firestore.FieldValue, b=fdb.batch();
+  ids.forEach(function(id){ b.set(fdb.doc('rifornimenti/'+id),{nome:agg[id].nome,qta:F.increment(agg[id].n),aggiornato:F.serverTimestamp()},{merge:true}); });
+  b.commit().catch(function(er){ console.warn('rifornimenti +:',er&&er.code); });
+}
+function rifDec(id,n){
+  var c=rif[id]; if(!c || !(n>0)) return;
+  var left=Math.max(0,c.qta-n), ref=fdb.doc('rifornimenti/'+id);
+  if(left>0){ rif[id]={nome:c.nome,qta:left}; ref.set({nome:c.nome,qta:left,aggiornato:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(er){ console.warn('rifornimenti -:',er&&er.code); }); }
+  else { delete rif[id]; ref.delete().catch(function(er){ console.warn('rifornimenti -:',er&&er.code); }); }
+  rifUi();
+}
+function rifRender(){
+  var ids=Object.keys(rif).filter(function(id){ return byId[id]; }).sort(function(a,b){ return String(rif[a].nome).localeCompare(String(rif[b].nome),'it'); });
+  var tot=ids.reduce(function(a,id){ return a+rif[id].qta; },0);
+  $('#rifBody').innerHTML = ids.length
+    ? '<div class="hint" style="margin:0 2px 8px"><b>'+tot+(tot===1?' pezzo':' pezzi')+'</b> da riportare in negozio, in '+ids.length+(ids.length===1?' riga':' righe')+'.</div>'
+      +ids.map(function(id){ var p=byId[id], c=rif[id], mag=p.qtaMagazzino|0, take=Math.min(c.qta,mag);
+        return '<div class="rifrow"><div class="rf-i"><div class="nm">'+esc(p.nome)+'</div><div class="rf-q">da rifornire <b>×'+c.qta+'</b> · magazzino '+mag+' · negozio '+(p.qtaNegozio|0)+'</div></div>'
+          +(mag>0 ? '<button type="button" class="btn p" data-go="'+esc(id)+'">Sposta '+(take<c.qta?take+' di '+c.qta:take)+'</button>' : '<span class="hint" style="text-align:right">Non c\'è in magazzino</span>')
+          +(role==='titolare'?'<button type="button" class="btn" data-del="'+esc(id)+'" aria-label="Togli dalla lista" title="Togli dalla lista">✕</button>':'')+'</div>'; }).join('')
+    : '<div class="empty" style="padding:30px 10px">✅ <b>Tutto rifornito.</b><br>Non c\'è niente da riportare in negozio.</div>';
+}
+function openRif(){ rifRender(); $('#rifOv').classList.add('show'); }
+$('#vendRif').onclick=openRif;
+$('#rifClose').onclick=function(){ $('#rifOv').classList.remove('show'); };
+$('#rifBody').addEventListener('click',function(e){
+  var g=e.target.closest('[data-go]'), d=e.target.closest('[data-del]');
+  if(g){ var p=byId[g.dataset.go], c=rif[g.dataset.go]; if(!p||!c) return; openMove(p); mv.dir='mn'; mv.qty=Math.max(1,Math.min(c.qta,p.qtaMagazzino|0)); renderMove(); }
+  else if(d && role==='titolare'){ var id=d.dataset.del, c2=rif[id]; if(c2 && confirm('Togliere «'+c2.nome+'» ('+c2.qta+' pezzi) dalla lista da rifornire?')){ delete rif[id]; fdb.doc('rifornimenti/'+id).delete().catch(function(){}); rifUi(); } }
+});
+
 /* ── Sposta merce ── */
 var mv=null, pinTry=0, pinLock=0;
 function srcQty(){ return mv&&mv.prod ? ((mv.dir==='mn'?mv.prod.qtaMagazzino:mv.prod.qtaNegozio)|0) : 0; }
@@ -1543,6 +1615,7 @@ function doMove(){
     });
   }).then(function(){
     clearTimeout(waitT); finished=true; $('#moveOv').classList.remove('show'); mv=null; toast('Spostato — '+msg);
+    if(from==='magazzino') rifDec(p.id,n);
   }).catch(function(er){
     clearTimeout(waitT); finished=true; go.disabled=false; console.warn('sposta:',er&&er.code);
     var code=er&&er.code, label=from==='magazzino'?'Magazzino':'Negozio';
@@ -2410,7 +2483,7 @@ function vendRender(){
   $('#vendOpen').classList.toggle('hidden',has);
   $('#vendMain').classList.toggle('hidden',!has||vs.tab!=='cerca');
   $('#vendFoglio').classList.toggle('hidden',!has||vs.tab!=='foglio');
-  $('#vendTabs').classList.toggle('hidden',!has); $('#vendEnd').classList.toggle('hidden',!has); $('#vendLeave').classList.toggle('hidden',!has);
+  $('#vendTabs').classList.toggle('hidden',!has); $('#vendEnd').classList.toggle('hidden',!has); $('#vendLeave').classList.toggle('hidden',!has); rifUi();
   Array.prototype.forEach.call(document.querySelectorAll('#vendTabs button'),function(b){ b.classList.toggle('on',b.dataset.t===vs.tab); });
   $('#vendWho').innerHTML = has ? esc(vs.shift.staffNome)+'<small>'+esc(vs.shift.postazione)+' · turno dalle '+hhmm(new Date(vs.shift.aperto))+'</small>' : 'Vendite';
   if(!has){ renderOpenPanel(); vendLockUi(); return; }
@@ -2522,6 +2595,7 @@ function vendOpenShift(){
   var pr=fdb.doc('turni/'+id).set(rec); trackWrite(pr); pr.catch(function(er){ console.warn('turno:',er&&er.code); toast(er&&er.code==='permission-denied'?'Il database non ha accettato il turno: pubblica le regole aggiornate (firestore.rules).':'Turno non registrato.'); });
   vs.shift={id:id,staffId:w.id,staffNome:w.nome,postazione:post,giorno:isoDay(now),ruolo:role,aperto:now.getTime()};
   lsSet(shiftKey(),vs.shift); lsSet(POST_KEY,post); vs.cart=[]; vs.cartSent='[]'; vs.tab='cerca'; vs.day=isoDay(now); vendRender(); vendStart();
+  if(rifTotal()) toast('📦 Ci sono '+rifTotal()+' pezzi da rifornire: tocca «Da rifornire».');
 }
 
 /* ricerca veloce */
@@ -2556,7 +2630,8 @@ function vsRender(){
     $('#vsRes').innerHTML=''; return;
   }
   $('#vsQuick').innerHTML='';
-  var list=products.filter(function(p){ return q ? matches(p,q) : ((!df||p.distributoreId===df) && (!cf||p.categoria===cf)); })   // scrivere = cercare in tutto
+  var isBcV=!!q && looksLikeBarcode(P.text);
+  var list=products.filter(function(p){ return isBcV ? matches(p,q) : ((!df||p.distributoreId===df) && (!cf||p.categoria===cf) && (!q||matches(p,q))); })   // il codice a barre cerca in tutto, il resto rispetta i filtri
     .sort(function(a,b){ return (q?rank(a,q)-rank(b,q):0) || String(a.nome).localeCompare(String(b.nome),'it'); });
   var shown=list.slice(0,60);
   var vg={}, vseen={};
@@ -2572,7 +2647,7 @@ function vsRender(){
       }
       return vsTile(p,P.qty);
     }).join('')+'</div>'+(list.length>60?'<div class="hint" style="margin:8px 2px">'+list.length+' risultati: scrivi qualcosa in più per restringere.</div>':'')
-    : '<div class="empty">Nessun articolo trovato.</div>';
+    : '<div class="empty">Nessun articolo trovato'+((q&&(df||cf)&&!isBcV)?' con i filtri scelti (distributore / categoria): cambiali o toglili.':'.')+'</div>';
 }
 function vsClearSearch(){ $('#vsQ').value=''; vsRender(); var q=$('#vsQ'); if(q && !('ontouchstart' in window)) q.focus(); }
 $('#vsQ').addEventListener('input',vsRender);
@@ -2656,7 +2731,7 @@ $('#vtGo').onclick=function(){
   vs.cart.forEach(function(l){ if(l.libero||!byId[l.id]) return; b.update(fdb.doc('prodotti/'+l.id),{qtaNegozio:F.increment(-l.qta),aggiornatoIl:F.serverTimestamp(),ultimaVenditaId:id}); });
   vs.busy=true; vtRender();
   commitFast(b).then(function(r){
-    vs.busy=false; vs.cart=[]; vtRender(); vsClearSearch();
+    vs.busy=false; vs.cart=[]; vtRender(); vsClearSearch(); rifAdd(righe);
     toast(r.queued?QUEUED_MSG:'Venduto: '+t.pz+(t.pz===1?' pezzo':' pezzi')+' · '+money(t.tot));
   }).catch(function(er){
     vs.busy=false; vtRender(); console.warn('vendita:',er&&er.code);
@@ -2684,7 +2759,7 @@ function vendCancel(r,who){
   var F=firebase.firestore.FieldValue, b=fdb.batch();
   b.update(fdb.doc('vendite/'+r.id),{annullata:true,annullataIl:F.serverTimestamp(),annullataDa:who||'Titolare'});
   (r.righe||[]).forEach(function(l){ if(l.libero||!l.id||!byId[l.id]) return; b.update(fdb.doc('prodotti/'+l.id),{qtaNegozio:F.increment(l.qta|0),aggiornatoIl:F.serverTimestamp(),ultimaVenditaId:r.id}); });
-  commitFast(b).then(function(x){ toast(x.queued?QUEUED_MSG:'Vendita annullata: i pezzi sono tornati in negozio.'); })
+  commitFast(b).then(function(x){ toast(x.queued?QUEUED_MSG:'Vendita annullata: i pezzi sono tornati in negozio.'); (r.righe||[]).forEach(function(l){ if(l.id && !l.libero) rifDec(l.id,l.qta|0); }); })
     .catch(function(er){ toast(er&&er.code==='permission-denied'?'Non si può annullare: sono passati più di '+CANCEL_MIN+' minuti o la giornata è chiusa.':'Annullamento non riuscito. Riprova.'); });
 }
 
@@ -2705,8 +2780,11 @@ $('#vendEnd').onclick=function(){
   $('#sumBody').innerHTML='<div style="font-size:15px;line-height:1.5"><b>'+esc(sh.staffNome)+'</b> · '+esc(sh.postazione)+'<br><span style="color:var(--espresso-2)">'+esc(dayLabel(sh.giorno))+' · dalle '+hhmm(new Date(sh.aperto))+' alle '+hhmm(new Date())+'</span></div>'
     +'<div class="og-kpis"><div class="kpi"><div class="l">Pezzi</div><div class="v">'+fmtN(pz)+'</div></div><div class="kpi"><div class="l">Vendite</div><div class="v">'+ok.length+'</div></div><div class="kpi"><div class="l">Totale</div><div class="v">'+money(round2(tot))+'</div></div></div>'
     +(items.length?tbl(['Articolo','Pezzi','Totale'],items.map(function(a){ return [esc(a.nome)+(a.codice?' <span style="color:var(--espresso-2)">'+esc(a.codice)+'</span>':''),fmtN(a.qta),money(round2(a.tot))]; }),[1,2]):'<div class="none">Nessuna vendita in questo turno.</div>');
+  var rt=rifTotal();
+  $('#sumRif').innerHTML = rt ? '<div class="repwarn" style="margin-top:14px">📦 Ci sono <b>'+rt+(rt===1?' pezzo':' pezzi')+'</b> da riportare dal magazzino al negozio.<br><button type="button" class="btn p" id="sumRifGo" style="margin-top:8px">Apri la lista da rifornire</button></div>' : '';
   $('#sumOv').classList.add('show');
 };
+$('#sumRif').addEventListener('click',function(e){ if(e.target.id==='sumRifGo'){ $('#sumOv').classList.remove('show'); openRif(); } });
 $('#sumClose').onclick=function(){ $('#sumOv').classList.remove('show'); };
 $('#sumPrint').onclick=function(){ document.body.classList.add('printing-sum'); setTimeout(function(){ window.print(); },50); };
 
