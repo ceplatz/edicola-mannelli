@@ -1050,11 +1050,12 @@ function renderResults(){
   var wrap=$('#resultsWrap');
   if(!q && !df && !cf){ wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
-  // La barra di ricerca ha la precedenza assoluta: se c'è scritto (o scansionato) qualcosa, si cerca in TUTTO l'archivio e i filtri distributore/categoria non contano.
-  var list=products.filter(function(p){ return q ? matches(p,q) : ((!df || p.distributoreId===df) && (!cf || p.categoria===cf)); }).sort(function(a,b){
+  // Un codice a barre ha la precedenza assoluta (si cerca in TUTTO l'archivio); qualsiasi altra ricerca vale dentro i filtri distributore/categoria scelti.
+  var isBc=!!q && looksLikeBarcode($('#q').value);
+  var list=products.filter(function(p){ return isBc ? matches(p,q) : ((!df || p.distributoreId===df) && (!cf || p.categoria===cf) && (!q || matches(p,q))); }).sort(function(a,b){
     return (q?rank(a,q)-rank(b,q):0) || String(a.nome).localeCompare(String(b.nome),'it');
   });
-  $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati')+((q&&(df||cf))?' · la ricerca vale su tutto: i filtri non contano':'') : '';
+  $('#count').textContent = list.length ? list.length+(list.length===1?' prodotto trovato':' prodotti trovati')+((isBc&&(df||cf))?' · il codice a barre cerca in tutto: i filtri non contano':'') : '';
   var groups={};
   list.forEach(function(p){ var si=sizeInfo(p); if(si){ var k=norm(si.base)+'|'+(p.distributoreId||''); (groups[k]=groups[k]||[]).push(p); } });
   var shown={};
@@ -1072,19 +1073,21 @@ function renderResults(){
     return '<button class="res" data-id="'+esc(p.id)+'">'+(p.miniatura?'<img class="thumb" alt="" src="'+esc(p.miniatura)+'">':'')+'<div class="info"><div class="nm">'+esc(p.nome)+'</div><div class="codes">'+esc(codes||'Nessun codice')+'</div>'+tagsHtml(p)+'</div>'
       +'<div class="qty"><div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">Negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">Magazzino<b>'+(p.qtaMagazzino|0)+'</b></div></div>'
       +'<div class="pr">'+eur.format(p.prezzoVendita||0)+'</div></button>';
-  }).join('') : '<div class="empty">'+emptyHtml(q)+'</div>';
+  }).join('') : '<div class="empty">'+emptyHtml(q,!!(df||cf))+'</div>';
 }
 // Un numero lungo senza risultati è quasi sempre un codice a barre che nessun articolo ha ancora: spieghiamolo e (titolare) offriamo di collegarlo.
 function looksLikeBarcode(q){ return /^[\d\s.\-]+$/.test(q) && String(q).replace(/\D/g,'').length>=7; }
-function emptyHtml(q){
+function emptyHtml(q,filtered){
   if(!products.length) return 'Ancora nessun prodotto.'+(role==='titolare'?' Usa «Nuovo prodotto» per iniziare.':'');
   if(q && looksLikeBarcode(q)){
     return '<b>Nessun articolo ha questo codice a barre.</b><br><span style="font-size:14px">Non è ancora stato collegato a nessun articolo.</span>'
       +(role==='titolare' ? '<br><button type="button" class="btn p" id="lnkOpen" style="margin-top:14px">🔗 Collega questo codice a un articolo</button>' : '<br><span style="font-size:14px">Chiedi alla titolare di collegarlo.</span>');
   }
+  if(q && filtered) return 'Nessun risultato con i filtri scelti (distributore / categoria).<br><button type="button" class="btn" id="clearFilters" style="margin-top:14px">Togli i filtri e cerca in tutto</button>';
   return 'Nessun risultato.';
 }
 $('#q').addEventListener('input',renderResults);
+$('#results').addEventListener('click',function(e){ if(e.target.id==='clearFilters'){ $('#distFilter').value=''; fillCatSelects(); $('#catFilter').value=''; renderResults(); } });
 $('#distFilter').addEventListener('change',function(){ fillCatSelects(); renderResults(); });
 $('#catFilter').addEventListener('change',renderResults);
 $('#results').addEventListener('click',function(e){ var b=e.target.closest('.res,.szc'); if(b) openView(b.dataset.id); });
@@ -2627,7 +2630,8 @@ function vsRender(){
     $('#vsRes').innerHTML=''; return;
   }
   $('#vsQuick').innerHTML='';
-  var list=products.filter(function(p){ return q ? matches(p,q) : ((!df||p.distributoreId===df) && (!cf||p.categoria===cf)); })   // scrivere = cercare in tutto
+  var isBcV=!!q && looksLikeBarcode(P.text);
+  var list=products.filter(function(p){ return isBcV ? matches(p,q) : ((!df||p.distributoreId===df) && (!cf||p.categoria===cf) && (!q||matches(p,q))); })   // il codice a barre cerca in tutto, il resto rispetta i filtri
     .sort(function(a,b){ return (q?rank(a,q)-rank(b,q):0) || String(a.nome).localeCompare(String(b.nome),'it'); });
   var shown=list.slice(0,60);
   var vg={}, vseen={};
@@ -2643,7 +2647,7 @@ function vsRender(){
       }
       return vsTile(p,P.qty);
     }).join('')+'</div>'+(list.length>60?'<div class="hint" style="margin:8px 2px">'+list.length+' risultati: scrivi qualcosa in più per restringere.</div>':'')
-    : '<div class="empty">Nessun articolo trovato.</div>';
+    : '<div class="empty">Nessun articolo trovato'+((q&&(df||cf)&&!isBcV)?' con i filtri scelti (distributore / categoria): cambiali o toglili.':'.')+'</div>';
 }
 function vsClearSearch(){ $('#vsQ').value=''; vsRender(); var q=$('#vsQ'); if(q && !('ontouchstart' in window)) q.focus(); }
 $('#vsQ').addEventListener('input',vsRender);
