@@ -1637,9 +1637,10 @@ function openRif(){ rifRender(); $('#rifFix').classList.toggle('hidden',role!=='
 // Ricontrollo (alla chiusura della giornata o col pulsante «Ricontrolla la lista»): rifà il conto in ordine di tempo sugli ultimi 14 giorni:
 // ogni vendita di magliette/felpe aggiunge i pezzi, ogni spostamento Magazzino→Negozio li toglie (mai sotto zero).
 // Così uno spostamento fatto PRIMA della vendita (es. al mattino, per riempire lo scaffale) non cancella la vendita, e rifarlo non duplica niente.
-var RIF_DAYS=14;
+var RIF_DAYS=14, RIF_FROM='2026-10-24';   // la lista è in uso dal 24/10: le vendite di prima non sono mai finite in nessuna lista e non si ricostruiscono
 function rifBuild(){
   var from=new Date(); from.setHours(0,0,0,0); from.setDate(from.getDate()-RIF_DAYS);
+  var start=new Date(RIF_FROM+'T00:00:00'); if(from<start) from=start;
   return Promise.all([
     fdb.collection('vendite').where('giorno','>=',isoDay(from)).get(),
     fdb.collection('movimenti').where('quando','>=',firebase.firestore.Timestamp.fromDate(from)).get()
