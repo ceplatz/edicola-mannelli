@@ -394,6 +394,8 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 .hrow .hs{font-size:12px;color:var(--espresso-2)}
 #fvFiles img{max-width:100%;border:1px solid var(--line);border-radius:10px;margin:6px 0;display:block}
 @media (max-width:640px){.bars .bar{grid-template-columns:90px 1fr 70px}}
+#updBar{position:fixed;left:12px;right:12px;bottom:12px;z-index:9000;background:var(--espresso);color:#fff;padding:12px 14px;border-radius:14px;display:flex;gap:12px;align-items:center;justify-content:space-between;box-shadow:var(--shadow-lg);font-size:15px}
+#updBar button{background:var(--coral);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap}
 #lblPrint{display:none}
 .btn.mini{padding:0 12px;height:46px;font-size:14px;flex-shrink:0}
 .lblprev{display:flex;justify-content:center;padding:14px;background:var(--sand-2);border:1.5px dashed var(--line);border-radius:14px;overflow:hidden}
@@ -762,6 +764,8 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <h3>📦 Da rifornire</h3>
   <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette vendute: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce.</div>
   <div id="rifBody"></div>
+  <div id="rifFix" class="hidden"><div class="hint" style="margin:10px 2px 4px">La lista si riempie da sola con le vendite fatte dopo l'aggiornamento. Se oggi sono state vendute magliette prima (o da un tablet non ancora aggiornato), puoi recuperarle:</div>
+    <button type="button" class="btn" id="rifRebuild">↻ Ricostruisci dalle vendite di oggi</button></div>
   <div class="acts"><button type="button" class="btn p" id="rifClose">Chiudi</button></div>
 </div></div>
 
@@ -1627,7 +1631,26 @@ function rifRender(){
           +(role==='titolare'?'<button type="button" class="btn" data-del="'+esc(id)+'" aria-label="Togli dalla lista" title="Togli dalla lista">✕</button>':'')+'</div>'; }).join('')
     : '<div class="empty" style="padding:30px 10px">✅ <b>Tutto rifornito.</b><br>Non c\'è niente da riportare in negozio.</div>';
 }
-function openRif(){ rifRender(); $('#rifOv').classList.add('show'); }
+function openRif(){ rifRender(); $('#rifFix').classList.toggle('hidden',role!=='titolare'); $('#rifOv').classList.add('show'); }
+// Titolare: rifà il conto da zero per OGGI = pezzi venduti di magliette − pezzi già riportati in negozio oggi. Non toglie mai nulla dalla lista (tiene il valore più alto).
+$('#rifRebuild').onclick=function(){
+  var btn=this, day=isoDay(new Date()), from=new Date(); from.setHours(0,0,0,0); btn.disabled=true;
+  Promise.all([
+    fdb.collection('vendite').where('giorno','==',day).get(),
+    fdb.collection('movimenti').where('quando','>=',firebase.firestore.Timestamp.fromDate(from)).get()
+  ]).then(function(r){
+    var sold={}, moved={};
+    r[0].docs.forEach(function(d){ var o=d.data(); if(o.annullata) return; (o.righe||[]).forEach(function(l){ if(l.id && !l.libero && byId[l.id] && isRiforn(byId[l.id])) sold[l.id]=(sold[l.id]||0)+(l.qta|0); }); });
+    r[1].docs.forEach(function(d){ var o=d.data(); if(o.da==='magazzino' && o.a==='negozio') moved[o.prodottoId]=(moved[o.prodottoId]||0)+(o.qta|0); });
+    var F=firebase.firestore.FieldValue, b=fdb.batch(), added=0, lines=0;
+    Object.keys(sold).forEach(function(id){
+      var target=Math.max(0,sold[id]-(moved[id]||0)), cur=rif[id]?rif[id].qta:0;
+      if(target>cur){ added+=target-cur; lines++; b.set(fdb.doc('rifornimenti/'+id),{nome:byId[id].nome,qta:target,aggiornato:F.serverTimestamp()}); }
+    });
+    if(!lines){ toast('Niente da aggiungere: la lista è già completa per oggi.'); btn.disabled=false; return; }
+    return b.commit().then(function(){ toast('Aggiunti '+added+(added===1?' pezzo':' pezzi')+' in '+lines+(lines===1?' riga':' righe')+'.'); btn.disabled=false; });
+  }).catch(function(er){ console.warn('ricostruisci:',er&&er.code); toast(er&&er.code==='permission-denied'?'Permesso negato: pubblica le regole aggiornate (firestore.rules).':'Non riuscito. Controlla la connessione e riprova.'); btn.disabled=false; });
+};
 $('#vendRif').onclick=openRif;
 $('#rifClose').onclick=function(){ $('#rifOv').classList.remove('show'); };
 $('#rifBody').addEventListener('click',function(e){
@@ -3012,6 +3035,21 @@ $('#ogCsv').onclick=function(){
 /* ── Orologio ── */
 function tick(){ var d=new Date(); $('#clockT').textContent=d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}); $('#clockD').textContent=d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}); }
 tick(); setInterval(tick,20000);
+
+/* ── Nuova versione disponibile ── */
+// Un tablet lasciato aperto tutto il giorno continua a usare la versione vecchia (e le vendite non finirebbero nelle funzioni nuove): ogni tanto si controlla e, se c'è una versione nuova, appare una barra «Aggiorna».
+var pageSig=null, updShown=false;
+function sigOf(t){ var h=5381; for(var i=0;i<t.length;i++) h=((h<<5)+h+t.charCodeAt(i))|0; return t.length+':'+h; }
+function checkNewVersion(){
+  if(updShown || !navigator.onLine) return;
+  fetch('index.html?v='+Date.now(),{cache:'no-store'}).then(function(r){ return r.ok ? r.text() : null; }).then(function(t){
+    if(!t) return; var sg=sigOf(t);
+    if(pageSig===null){ pageSig=sg; return; }
+    if(sg!==pageSig){ updShown=true; var b=document.createElement('div'); b.id='updBar'; b.innerHTML='🔄 È disponibile una versione nuova dell\'app. <button type="button" id="updGo">Aggiorna</button>'; document.body.appendChild(b); $('#updGo').onclick=function(){ location.reload(); }; }
+  }).catch(function(){});
+}
+setTimeout(checkNewVersion,4000); setInterval(checkNewVersion,300000);
+document.addEventListener('visibilitychange',function(){ if(!document.hidden) checkNewVersion(); });
 
 /* ── Avvio ── */
 if(fbInit()){ auth.onAuthStateChanged(onUser); }
