@@ -764,8 +764,8 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <h3>📦 Da rifornire</h3>
   <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette e felpe vendute ieri o oggi: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce. La lista si crea quando la titolare chiude la giornata.</div>
   <div id="rifBody"></div>
-  <div id="rifFix" class="hidden"><div class="hint" style="margin:10px 2px 4px">La lista si crea alla chiusura della giornata (in Oggi). Per farla subito con le vendite di oggi:</div>
-    <button type="button" class="btn" id="rifRebuild">↻ Crea la lista con le vendite di oggi</button></div>
+  <div id="rifFix" class="hidden"><div class="hint" style="margin:10px 2px 4px">La lista si crea alla chiusura della giornata (in Oggi). Per aggiornarla subito:</div>
+    <button type="button" class="btn" id="rifRebuild">↻ Aggiorna la lista ora</button></div>
   <div class="acts"><button type="button" class="btn p" id="rifClose">Chiudi</button></div>
 </div></div>
 
@@ -914,7 +914,7 @@ setTimeout(function(){ $('#splash').classList.add('hide'); }, viridianMs + 1300)
 setTimeout(function(){ $('#splash').style.display='none'; }, viridianMs + 1900);
 
 /* ── Firebase ── */
-var auth=null, fdb=null, role=null, products=[], unsub=null, byId={}, rif={}, unsubRif=null;
+var auth=null, fdb=null, role=null, products=[], unsub=null, byId={}, rif={}, rifDa={}, unsubRif=null;
 function fbReady(){ return typeof firebase!=='undefined'; }
 function fbInit(){
   if(!fbReady()) return false;
@@ -1594,7 +1594,7 @@ function isRiforn(p){ return !!p && /t-?shirt|maglia|maglie|felpa|felpe/i.test(S
 function startRif(){
   if(unsubRif) unsubRif();
   unsubRif=fdb.collection('rifornimenti').onSnapshot(function(snap){
-    rif={}; snap.docs.forEach(function(d){ var o=d.data(); if((o.qta|0)>0) rif[d.id]={nome:o.nome||'',qta:o.qta|0}; });
+    rif={}; rifDa={}; snap.docs.forEach(function(d){ var o=d.data(); if(o.da) rifDa[d.id]=+o.da; if((o.qta|0)>0) rif[d.id]={nome:o.nome||'',qta:o.qta|0}; });
     rifUi();
   },function(er){ console.warn('rifornimenti:',er&&er.code); });
 }
@@ -1607,9 +1607,10 @@ function rifUi(){
 }
 function rifDec(id,n){
   var c=rif[id]; if(!c || !(n>0)) return;
-  var left=Math.max(0,c.qta-n), ref=fdb.doc('rifornimenti/'+id);
-  if(left>0){ rif[id]={nome:c.nome,qta:left}; ref.set({nome:c.nome,qta:left,aggiornato:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(er){ console.warn('rifornimenti -:',er&&er.code); }); }
-  else { delete rif[id]; ref.delete().catch(function(er){ console.warn('rifornimenti -:',er&&er.code); }); }
+  var left=Math.max(0,c.qta-n), ref=fdb.doc('rifornimenti/'+id), F=firebase.firestore.FieldValue, da=rifDa[id];
+  var rec={nome:c.nome,qta:left,aggiornato:F.serverTimestamp()}; if(da) rec.da=da;
+  if(left>0) rif[id]={nome:c.nome,qta:left}; else delete rif[id];
+  (left>0||da ? ref.set(rec) : ref.delete()).catch(function(er){ console.warn('rifornimenti -:',er&&er.code); });
   rifUi();
 }
 function rifRender(){
@@ -1624,40 +1625,50 @@ function rifRender(){
     : '<div class="empty" style="padding:30px 10px">✅ <b>Tutto rifornito.</b><br>Non c\'è niente da riportare in negozio.</div>';
 }
 function openRif(){ rifRender(); $('#rifFix').classList.toggle('hidden',role!=='titolare'); $('#rifOv').classList.add('show'); }
-// La lista si crea quando la titolare CHIUDE LA GIORNATA: pezzi di magliette venduti quel giorno − pezzi già riportati in negozio quel giorno.
-// Non toglie mai nulla dalla lista (tiene il valore più alto), quindi si può rilanciare senza duplicare.
-function rifBuildDay(day){
-  var from=new Date(day+'T00:00:00'), to=new Date(from.getTime()); to.setDate(to.getDate()+1);
+// La lista si crea quando la titolare CHIUDE LA GIORNATA, rifacendo il conto in ordine di tempo sugli ultimi 14 giorni:
+// ogni vendita di magliette/felpe aggiunge i pezzi, ogni spostamento Magazzino→Negozio li toglie (mai sotto zero).
+// Così uno spostamento fatto PRIMA della vendita (es. al mattino, per riempire lo scaffale) non cancella la vendita, e rifarlo non duplica niente.
+var RIF_DAYS=14;
+function rifBuild(){
+  var from=new Date(); from.setHours(0,0,0,0); from.setDate(from.getDate()-RIF_DAYS);
   return Promise.all([
-    fdb.collection('vendite').where('giorno','==',day).get(),
-    fdb.collection('movimenti').where('quando','>=',firebase.firestore.Timestamp.fromDate(from)).where('quando','<',firebase.firestore.Timestamp.fromDate(to)).get()
+    fdb.collection('vendite').where('giorno','>=',isoDay(from)).get(),
+    fdb.collection('movimenti').where('quando','>=',firebase.firestore.Timestamp.fromDate(from)).get()
   ]).then(function(r){
-    var sold={}, moved={};
-    r[0].docs.forEach(function(d){ var o=d.data(); if(o.annullata) return; (o.righe||[]).forEach(function(l){ if(l.id && !l.libero && byId[l.id] && isRiforn(byId[l.id])) sold[l.id]=(sold[l.id]||0)+(l.qta|0); }); });
-    r[1].docs.forEach(function(d){ var o=d.data(); if(o.da==='magazzino' && o.a==='negozio') moved[o.prodottoId]=(moved[o.prodottoId]||0)+(o.qta|0); });
+    var ev={}; function add(id,t,q,sale){ (ev[id]=ev[id]||[]).push({t:t,q:q,sale:sale}); }
+    r[0].docs.forEach(function(d){ var o=d.data(); if(o.annullata) return; var t=(tsDate(o.quando)||tsDate(o.quandoLocale)||new Date(0)).getTime();
+      (o.righe||[]).forEach(function(l){ if(l.id && !l.libero && byId[l.id] && isRiforn(byId[l.id])) add(l.id,t,l.qta|0,true); }); });
+    r[1].docs.forEach(function(d){ var o=d.data(); if(o.da==='magazzino' && o.a==='negozio' && o.prodottoId) add(o.prodottoId,(tsDate(o.quando)||new Date(0)).getTime(),o.qta|0,false); });
     var F=firebase.firestore.FieldValue, b=fdb.batch(), added=0, lines=0;
-    Object.keys(sold).forEach(function(id){
-      var target=Math.max(0,sold[id]-(moved[id]||0)), cur=rif[id]?rif[id].qta:0;
-      if(target>cur){ added+=target-cur; lines++; b.set(fdb.doc('rifornimenti/'+id),{nome:byId[id].nome,qta:target,aggiornato:F.serverTimestamp()}); }
+    Object.keys(ev).forEach(function(id){
+      var floor=rifDa[id]||0, p=0;
+      ev[id].filter(function(e){ return e.t>floor; }).sort(function(a,b){ return (a.t-b.t) || ((b.sale?1:0)-(a.sale?1:0)); })
+        .forEach(function(e){ p = e.sale ? p+e.q : Math.max(0,p-e.q); });
+      var cur=rif[id]?rif[id].qta:0;
+      if(p!==cur){
+        if(p>cur) added+=p-cur; lines++;
+        var rec={nome:byId[id].nome,qta:p,aggiornato:F.serverTimestamp()}; if(rifDa[id]) rec.da=rifDa[id];
+        if(p>0 || rifDa[id]) b.set(fdb.doc('rifornimenti/'+id),rec); else b.delete(fdb.doc('rifornimenti/'+id));
+      }
     });
     if(!lines) return {added:0,lines:0};
     return b.commit().then(function(){ return {added:added,lines:lines}; });
   });
 }
-function rifBuildUi(day,btn){
+function rifBuildUi(btn){
   if(btn) btn.disabled=true;
-  rifBuildDay(day).then(function(x){
-    toast(x.lines ? 'Lista da rifornire: aggiunti '+x.added+(x.added===1?' pezzo':' pezzi')+' in '+x.lines+(x.lines===1?' riga':' righe')+'.' : 'Niente da aggiungere: la lista è già completa per questo giorno.');
+  rifBuild().then(function(x){
+    toast(x.lines ? 'Lista da rifornire aggiornata ('+x.lines+(x.lines===1?' riga':' righe')+(x.added?', +'+x.added+(x.added===1?' pezzo':' pezzi'):'')+').' : 'La lista è già corretta.');
   }).catch(function(er){ console.warn('lista da rifornire:',er&&er.code); toast(er&&er.code==='permission-denied'?'Permesso negato: pubblica le regole aggiornate (firestore.rules).':'Lista non creata. Controlla la connessione e riprova.'); })
     .then(function(){ if(btn) btn.disabled=false; });
 }
-$('#rifRebuild').onclick=function(){ rifBuildUi(isoDay(new Date()),this); };
+$('#rifRebuild').onclick=function(){ rifBuildUi(this); };
 $('#vendRif').onclick=openRif;
 $('#rifClose').onclick=function(){ $('#rifOv').classList.remove('show'); };
 $('#rifBody').addEventListener('click',function(e){
   var g=e.target.closest('[data-go]'), d=e.target.closest('[data-del]');
   if(g){ var p=byId[g.dataset.go], c=rif[g.dataset.go]; if(!p||!c) return; openMove(p); mv.dir='mn'; mv.qty=Math.max(1,Math.min(c.qta,p.qtaMagazzino|0)); renderMove(); }
-  else if(d && role==='titolare'){ var id=d.dataset.del, c2=rif[id]; if(c2 && confirm('Togliere «'+c2.nome+'» ('+c2.qta+' pezzi) dalla lista da rifornire?')){ delete rif[id]; fdb.doc('rifornimenti/'+id).delete().catch(function(){}); rifUi(); } }
+  else if(d && role==='titolare'){ var id=d.dataset.del, c2=rif[id]; if(c2 && confirm('Togliere «'+c2.nome+'» ('+c2.qta+' pezzi) dalla lista da rifornire?')){ delete rif[id]; rifDa[id]=Date.now(); fdb.doc('rifornimenti/'+id).set({nome:c2.nome,qta:0,da:rifDa[id],aggiornato:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){}); rifUi(); } }
 });
 
 /* ── Sposta merce ── */
@@ -3005,7 +3016,7 @@ function ogRender(){
 }
 $('#ogBody').addEventListener('toggle',function(e){ var d=e.target; if(d && d.classList && d.classList.contains('og-p')) og.openP[d.dataset.p]=d.open; },true);
 $('#ogSeal').addEventListener('click',function(e){
-  if(e.target.id==='ogSealBtn') ogSealDay(); else if(e.target.id==='ogReopen') ogReopen(); else if(e.target.id==='ogRif'){ rifBuildUi(og.day,e.target); openRif(); }
+  if(e.target.id==='ogSealBtn') ogSealDay(); else if(e.target.id==='ogReopen') ogReopen(); else if(e.target.id==='ogRif'){ rifBuildUi(e.target); openRif(); }
 });
 $('#ogBody').addEventListener('click',function(e){ var b=e.target.closest('[data-cancel]'); if(!b) return; var r=og.sales.filter(function(x){ return x.id===b.dataset.cancel; })[0]; if(r) vendCancel(r,'Titolare'); });
 function ogSealDay(){
@@ -3015,7 +3026,7 @@ function ogSealDay(){
   b.set(fdb.doc('giornate/'+og.day),{chiusa:true,chiusaDa:'Titolare',chiusaIl:F.serverTimestamp(),pezzi:A.pz,totale:A.tot,vendite:A.ok.length,annullate:A.voided,
     perPersona:A.by.map(function(a){ return {nome:a.nome,postazione:a.post,vendite:a.n,pezzi:a.pz,totale:round2(a.tot)}; })});
   openSh.forEach(function(s){ b.update(fdb.doc('turni/'+s.id),{chiusoIl:F.serverTimestamp()}); b.delete(fdb.doc('carrelli/'+s.id)); });
-  commitFast(b).then(function(r){ toast(r.queued?QUEUED_MSG:'Giornata chiusa.'); rifBuildDay(sealDay).then(function(x){ if(x.lines) toast('Giornata chiusa. Lista da rifornire: '+x.added+(x.added===1?' pezzo':' pezzi')+' da riportare in negozio.'); }).catch(function(er){ console.warn('lista da rifornire:',er&&er.code); }); }).catch(function(er){ toast(er&&er.code==='permission-denied'?'Il database non permette di chiudere la giornata: pubblica le regole aggiornate (firestore.rules).':'Chiusura non riuscita. Riprova.'); });
+  commitFast(b).then(function(r){ toast(r.queued?QUEUED_MSG:'Giornata chiusa.'); rifBuild().then(function(x){ if(x.lines) toast('Giornata chiusa. Lista da rifornire: '+rifTotal()+(rifTotal()===1?' pezzo':' pezzi')+' da riportare in negozio.'); }).catch(function(er){ console.warn('lista da rifornire:',er&&er.code); }); }).catch(function(er){ toast(er&&er.code==='permission-denied'?'Il database non permette di chiudere la giornata: pubblica le regole aggiornate (firestore.rules).':'Chiusura non riuscita. Riprova.'); });
 }
 function ogReopen(){
   if(!confirm('Riaprire la giornata del '+dayLabel(og.day)+'? Si potranno di nuovo registrare e annullare vendite (i turni chiusi restano chiusi).')) return;

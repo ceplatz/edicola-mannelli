@@ -132,7 +132,8 @@ service cloud.firestore {
     match /rifornimenti/{id} {
       allow read: if titolare() || personale();
       allow create, update: if (titolare() || personale())
-        && request.resource.data.keys().hasOnly(['nome', 'qta', 'aggiornato'])
+        && request.resource.data.keys().hasOnly(['nome', 'qta', 'aggiornato', 'da'])
+        && (!('da' in request.resource.data) || request.resource.data.da is number)
         && request.resource.data.nome is string && request.resource.data.nome.size() <= 160
         && request.resource.data.qta is int && request.resource.data.qta >= 0 && request.resource.data.qta <= 100000;
       allow delete: if titolare() || personale();
