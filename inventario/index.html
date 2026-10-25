@@ -762,10 +762,10 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 <!-- Da rifornire: pezzi venduti da riportare dal magazzino al negozio -->
 <div class="ov" id="rifOv" style="z-index:5300"><div class="sheet wide">
   <h3>📦 Da rifornire</h3>
-  <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette vendute: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce.</div>
+  <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette vendute ieri o oggi: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce. La lista si crea quando la titolare chiude la giornata.</div>
   <div id="rifBody"></div>
-  <div id="rifFix" class="hidden"><div class="hint" style="margin:10px 2px 4px">La lista si riempie da sola con le vendite fatte dopo l'aggiornamento. Se oggi sono state vendute magliette prima (o da un tablet non ancora aggiornato), puoi recuperarle:</div>
-    <button type="button" class="btn" id="rifRebuild">↻ Ricostruisci dalle vendite di oggi</button></div>
+  <div id="rifFix" class="hidden"><div class="hint" style="margin:10px 2px 4px">La lista si crea alla chiusura della giornata (in Oggi). Per farla subito con le vendite di oggi:</div>
+    <button type="button" class="btn" id="rifRebuild">↻ Crea la lista con le vendite di oggi</button></div>
   <div class="acts"><button type="button" class="btn p" id="rifClose">Chiudi</button></div>
 </div></div>
 
@@ -1605,14 +1605,6 @@ function rifUi(){
   var vb=$('#vendRif'), nn=rifTotal(); vb.textContent='📦 Da rifornire: '+nn; vb.classList.toggle('hidden',!(nn && vs.shift));
   if($('#rifOv').classList.contains('show')) rifRender();
 }
-// Segnato DOPO che la vendita è andata a buon fine (e separato): se le regole del database non sono aggiornate, la vendita non ne risente.
-function rifAdd(righe){
-  var agg={}; (righe||[]).forEach(function(l){ var p=l.id&&byId[l.id]; if(p && !l.libero && isRiforn(p)){ (agg[l.id]=agg[l.id]||{nome:p.nome,n:0}).n+=l.qta|0; } });
-  var ids=Object.keys(agg); if(!ids.length) return;
-  var F=firebase.firestore.FieldValue, b=fdb.batch();
-  ids.forEach(function(id){ b.set(fdb.doc('rifornimenti/'+id),{nome:agg[id].nome,qta:F.increment(agg[id].n),aggiornato:F.serverTimestamp()},{merge:true}); });
-  b.commit().catch(function(er){ console.warn('rifornimenti +:',er&&er.code); });
-}
 function rifDec(id,n){
   var c=rif[id]; if(!c || !(n>0)) return;
   var left=Math.max(0,c.qta-n), ref=fdb.doc('rifornimenti/'+id);
@@ -1632,12 +1624,13 @@ function rifRender(){
     : '<div class="empty" style="padding:30px 10px">✅ <b>Tutto rifornito.</b><br>Non c\'è niente da riportare in negozio.</div>';
 }
 function openRif(){ rifRender(); $('#rifFix').classList.toggle('hidden',role!=='titolare'); $('#rifOv').classList.add('show'); }
-// Titolare: rifà il conto da zero per OGGI = pezzi venduti di magliette − pezzi già riportati in negozio oggi. Non toglie mai nulla dalla lista (tiene il valore più alto).
-$('#rifRebuild').onclick=function(){
-  var btn=this, day=isoDay(new Date()), from=new Date(); from.setHours(0,0,0,0); btn.disabled=true;
-  Promise.all([
+// La lista si crea quando la titolare CHIUDE LA GIORNATA: pezzi di magliette venduti quel giorno − pezzi già riportati in negozio quel giorno.
+// Non toglie mai nulla dalla lista (tiene il valore più alto), quindi si può rilanciare senza duplicare.
+function rifBuildDay(day){
+  var from=new Date(day+'T00:00:00'), to=new Date(from.getTime()); to.setDate(to.getDate()+1);
+  return Promise.all([
     fdb.collection('vendite').where('giorno','==',day).get(),
-    fdb.collection('movimenti').where('quando','>=',firebase.firestore.Timestamp.fromDate(from)).get()
+    fdb.collection('movimenti').where('quando','>=',firebase.firestore.Timestamp.fromDate(from)).where('quando','<',firebase.firestore.Timestamp.fromDate(to)).get()
   ]).then(function(r){
     var sold={}, moved={};
     r[0].docs.forEach(function(d){ var o=d.data(); if(o.annullata) return; (o.righe||[]).forEach(function(l){ if(l.id && !l.libero && byId[l.id] && isRiforn(byId[l.id])) sold[l.id]=(sold[l.id]||0)+(l.qta|0); }); });
@@ -1647,10 +1640,18 @@ $('#rifRebuild').onclick=function(){
       var target=Math.max(0,sold[id]-(moved[id]||0)), cur=rif[id]?rif[id].qta:0;
       if(target>cur){ added+=target-cur; lines++; b.set(fdb.doc('rifornimenti/'+id),{nome:byId[id].nome,qta:target,aggiornato:F.serverTimestamp()}); }
     });
-    if(!lines){ toast('Niente da aggiungere: la lista è già completa per oggi.'); btn.disabled=false; return; }
-    return b.commit().then(function(){ toast('Aggiunti '+added+(added===1?' pezzo':' pezzi')+' in '+lines+(lines===1?' riga':' righe')+'.'); btn.disabled=false; });
-  }).catch(function(er){ console.warn('ricostruisci:',er&&er.code); toast(er&&er.code==='permission-denied'?'Permesso negato: pubblica le regole aggiornate (firestore.rules).':'Non riuscito. Controlla la connessione e riprova.'); btn.disabled=false; });
-};
+    if(!lines) return {added:0,lines:0};
+    return b.commit().then(function(){ return {added:added,lines:lines}; });
+  });
+}
+function rifBuildUi(day,btn){
+  if(btn) btn.disabled=true;
+  rifBuildDay(day).then(function(x){
+    toast(x.lines ? 'Lista da rifornire: aggiunti '+x.added+(x.added===1?' pezzo':' pezzi')+' in '+x.lines+(x.lines===1?' riga':' righe')+'.' : 'Niente da aggiungere: la lista è già completa per questo giorno.');
+  }).catch(function(er){ console.warn('lista da rifornire:',er&&er.code); toast(er&&er.code==='permission-denied'?'Permesso negato: pubblica le regole aggiornate (firestore.rules).':'Lista non creata. Controlla la connessione e riprova.'); })
+    .then(function(){ if(btn) btn.disabled=false; });
+}
+$('#rifRebuild').onclick=function(){ rifBuildUi(isoDay(new Date()),this); };
 $('#vendRif').onclick=openRif;
 $('#rifClose').onclick=function(){ $('#rifOv').classList.remove('show'); };
 $('#rifBody').addEventListener('click',function(e){
@@ -2864,7 +2865,7 @@ $('#vtGo').onclick=function(){
   vs.cart.forEach(function(l){ if(l.libero||!byId[l.id]) return; b.update(fdb.doc('prodotti/'+l.id),{qtaNegozio:F.increment(-l.qta),aggiornatoIl:F.serverTimestamp(),ultimaVenditaId:id}); });
   vs.busy=true; vtRender();
   commitFast(b).then(function(r){
-    vs.busy=false; vs.cart=[]; vtRender(); vsClearSearch(); rifAdd(righe);
+    vs.busy=false; vs.cart=[]; vtRender(); vsClearSearch();
     toast(r.queued?QUEUED_MSG:'Venduto: '+t.pz+(t.pz===1?' pezzo':' pezzi')+' · '+money(t.tot));
   }).catch(function(er){
     vs.busy=false; vtRender(); console.warn('vendita:',er&&er.code);
@@ -2892,7 +2893,7 @@ function vendCancel(r,who){
   var F=firebase.firestore.FieldValue, b=fdb.batch();
   b.update(fdb.doc('vendite/'+r.id),{annullata:true,annullataIl:F.serverTimestamp(),annullataDa:who||'Titolare'});
   (r.righe||[]).forEach(function(l){ if(l.libero||!l.id||!byId[l.id]) return; b.update(fdb.doc('prodotti/'+l.id),{qtaNegozio:F.increment(l.qta|0),aggiornatoIl:F.serverTimestamp(),ultimaVenditaId:r.id}); });
-  commitFast(b).then(function(x){ toast(x.queued?QUEUED_MSG:'Vendita annullata: i pezzi sono tornati in negozio.'); (r.righe||[]).forEach(function(l){ if(l.id && !l.libero) rifDec(l.id,l.qta|0); }); })
+  commitFast(b).then(function(x){ toast(x.queued?QUEUED_MSG:'Vendita annullata: i pezzi sono tornati in negozio.'); })
     .catch(function(er){ toast(er&&er.code==='permission-denied'?'Non si può annullare: sono passati più di '+CANCEL_MIN+' minuti o la giornata è chiusa.':'Annullamento non riuscito. Riprova.'); });
 }
 
@@ -2913,7 +2914,7 @@ $('#vendEnd').onclick=function(){
   $('#sumBody').innerHTML='<div style="font-size:15px;line-height:1.5"><b>'+esc(sh.staffNome)+'</b> · '+esc(sh.postazione)+'<br><span style="color:var(--espresso-2)">'+esc(dayLabel(sh.giorno))+' · dalle '+hhmm(new Date(sh.aperto))+' alle '+hhmm(new Date())+'</span></div>'
     +'<div class="og-kpis"><div class="kpi"><div class="l">Pezzi</div><div class="v">'+fmtN(pz)+'</div></div><div class="kpi"><div class="l">Vendite</div><div class="v">'+ok.length+'</div></div><div class="kpi"><div class="l">Totale</div><div class="v">'+money(round2(tot))+'</div></div></div>'
     +(items.length?tbl(['Articolo','Pezzi','Totale'],items.map(function(a){ return [esc(a.nome)+(a.codice?' <span style="color:var(--espresso-2)">'+esc(a.codice)+'</span>':''),fmtN(a.qta),money(round2(a.tot))]; }),[1,2]):'<div class="none">Nessuna vendita in questo turno.</div>');
-  var rt=rifTotal();
+  var rt=0;   // la lista si crea alla chiusura della giornata: niente avviso qui
   $('#sumRif').innerHTML = rt ? '<div class="repwarn" style="margin-top:14px">📦 Ci sono <b>'+rt+(rt===1?' pezzo':' pezzi')+'</b> da riportare dal magazzino al negozio.<br><button type="button" class="btn p" id="sumRifGo" style="margin-top:8px">Apri la lista da rifornire</button></div>' : '';
   $('#sumOv').classList.add('show');
 };
@@ -2984,8 +2985,8 @@ function ogRender(){
   $('#ogLabel').textContent=dayLabel(og.day)+(isToday?' · oggi':''); $('#ogNext').disabled=isToday; $('#ogLive').classList.toggle('hidden',!isToday);
   var seal=og.seal, openSh=og.shifts.filter(function(s){ return !s.chiusoIl; });
   $('#ogSeal').innerHTML='<div class="og-seal'+(seal?' sealed':'')+' noprint">'
-    +(seal ? '<span>🔒 <b>Giornata chiusa</b> da '+esc(seal.chiusaDa||'')+(tsDate(seal.chiusaIl)?' alle '+hhmm(tsDate(seal.chiusaIl)):'')+' — '+fmtN(seal.pezzi|0)+' pezzi · '+money(seal.totale)+'</span><button type="button" class="btn" id="ogReopen">Riapri la giornata</button>'
-           : '<span>'+(openSh.length?'<b>Turni aperti:</b> '+openSh.map(function(s){ return esc(s.staffNome)+' ('+esc(s.postazione)+')'; }).join(', '):'Nessun turno aperto adesso.')+'</span><button type="button" class="btn p" id="ogSealBtn">🔒 Chiudi la giornata</button>')
+    +(seal ? '<span>🔒 <b>Giornata chiusa</b> da '+esc(seal.chiusaDa||'')+(tsDate(seal.chiusaIl)?' alle '+hhmm(tsDate(seal.chiusaIl)):'')+' — '+fmtN(seal.pezzi|0)+' pezzi · '+money(seal.totale)+'</span><button type="button" class="btn" id="ogReopen">Riapri la giornata</button><button type="button" class="btn" id="ogRif">📦 Lista da rifornire</button>'
+           : '<span>'+(openSh.length?'<b>Turni aperti:</b> '+openSh.map(function(s){ return esc(s.staffNome)+' ('+esc(s.postazione)+')'; }).join(', '):'Nessun turno aperto adesso.')+'</span><button type="button" class="btn p" id="ogSealBtn">🔒 Chiudi la giornata</button><button type="button" class="btn" id="ogRif">📦 Lista da rifornire</button>')
     +'</div>';
   var maxH=0; Object.keys(A.hours).forEach(function(h){ if(A.hours[h]>maxH) maxH=A.hours[h]; });
   var hrs=Object.keys(A.hours).map(Number); var h0=hrs.length?Math.min.apply(null,hrs):9, h1=hrs.length?Math.max.apply(null,hrs):19; h1=Math.min(23,Math.max(h1,h0+6)); h0=Math.max(0,Math.min(h0,h1-6));
@@ -3004,17 +3005,17 @@ function ogRender(){
 }
 $('#ogBody').addEventListener('toggle',function(e){ var d=e.target; if(d && d.classList && d.classList.contains('og-p')) og.openP[d.dataset.p]=d.open; },true);
 $('#ogSeal').addEventListener('click',function(e){
-  if(e.target.id==='ogSealBtn') ogSealDay(); else if(e.target.id==='ogReopen') ogReopen();
+  if(e.target.id==='ogSealBtn') ogSealDay(); else if(e.target.id==='ogReopen') ogReopen(); else if(e.target.id==='ogRif'){ rifBuildUi(og.day,e.target); openRif(); }
 });
 $('#ogBody').addEventListener('click',function(e){ var b=e.target.closest('[data-cancel]'); if(!b) return; var r=og.sales.filter(function(x){ return x.id===b.dataset.cancel; })[0]; if(r) vendCancel(r,'Titolare'); });
 function ogSealDay(){
-  var A=ogAgg(), openSh=og.shifts.filter(function(s){ return !s.chiusoIl; });
+  var sealDay=og.day, A=ogAgg(), openSh=og.shifts.filter(function(s){ return !s.chiusoIl; });
   if(!confirm('Chiudere la giornata del '+dayLabel(og.day)+'?\n\n'+A.ok.length+' vendite · '+A.pz+' pezzi · '+money(A.tot)+'\n\nDopo la chiusura nessuno potrà registrare né annullare vendite di questo giorno'+(openSh.length?' e i '+openSh.length+' turni ancora aperti verranno chiusi':'')+'. Puoi sempre riaprirla.\n\nPrima controlla che tutti i computer siano verdi (sincronizzati): le vendite ancora in attesa verrebbero rifiutate.')) return;
   var F=firebase.firestore.FieldValue, b=fdb.batch();
   b.set(fdb.doc('giornate/'+og.day),{chiusa:true,chiusaDa:'Titolare',chiusaIl:F.serverTimestamp(),pezzi:A.pz,totale:A.tot,vendite:A.ok.length,annullate:A.voided,
     perPersona:A.by.map(function(a){ return {nome:a.nome,postazione:a.post,vendite:a.n,pezzi:a.pz,totale:round2(a.tot)}; })});
   openSh.forEach(function(s){ b.update(fdb.doc('turni/'+s.id),{chiusoIl:F.serverTimestamp()}); b.delete(fdb.doc('carrelli/'+s.id)); });
-  commitFast(b).then(function(r){ toast(r.queued?QUEUED_MSG:'Giornata chiusa.'); }).catch(function(er){ toast(er&&er.code==='permission-denied'?'Il database non permette di chiudere la giornata: pubblica le regole aggiornate (firestore.rules).':'Chiusura non riuscita. Riprova.'); });
+  commitFast(b).then(function(r){ toast(r.queued?QUEUED_MSG:'Giornata chiusa.'); rifBuildDay(sealDay).then(function(x){ if(x.lines) toast('Giornata chiusa. Lista da rifornire: '+x.added+(x.added===1?' pezzo':' pezzi')+' da riportare in negozio.'); }).catch(function(er){ console.warn('lista da rifornire:',er&&er.code); }); }).catch(function(er){ toast(er&&er.code==='permission-denied'?'Il database non permette di chiudere la giornata: pubblica le regole aggiornate (firestore.rules).':'Chiusura non riuscita. Riprova.'); });
 }
 function ogReopen(){
   if(!confirm('Riaprire la giornata del '+dayLabel(og.day)+'? Si potranno di nuovo registrare e annullare vendite (i turni chiusi restano chiusi).')) return;
