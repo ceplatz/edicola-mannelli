@@ -684,6 +684,10 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
     <div class="with-scan"><input name="nome" placeholder="Nome del distributore" maxlength="60" required><button type="submit" class="btn p">Aggiungi</button></div>
     <div class="ferr" id="distErr"></div>
   </form>
+  <label style="margin-top:26px">Copia di sicurezza</label>
+  <p class="hint" style="margin:2px 0 6px">Scarica un file con TUTTI i dati: articoli (con prezzi di acquisto e quantità), vendite, spostamenti, turni, giornate chiuse e distributori. Conservalo fuori da Firebase (per esempio su una chiavetta o nel tuo cloud). Non include i PIN né i file delle foto e delle fatture.</p>
+  <div class="acts" style="justify-content:flex-start;margin-top:6px"><button type="button" class="btn" id="bkGo">⬇ Scarica la copia dei dati</button></div>
+  <div class="hint" id="bkMsg" style="margin-top:6px"></div>
   <label style="margin-top:26px">Importa dati</label>
   <p class="hint" style="margin:2px 0 6px">Carica i file CSV preparati da Claude. Prima vedi un riepilogo: l'importazione parte solo dopo la conferma. Importare di nuovo lo stesso file aggiorna senza duplicare e non tocca le quantità.</p>
   <div class="row2"><div><label>1. Prodotti</label><input type="file" id="impProdFile" accept=".csv,text/csv"></div><div><label>2. Storico</label><input type="file" id="impHistFile" accept=".csv,text/csv"></div></div>
@@ -759,6 +763,22 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 </div></div>
 
 <!-- Vendite: riepilogo del turno -->
+<!-- Da ricontare: articoli con giacenza negativa o segnati «da ricontare» (titolare) -->
+<div class="ov" id="rcOv" style="z-index:5300"><div class="sheet wide">
+  <h3>🔢 Da ricontare</h3>
+  <div class="hint" id="rcHint" style="margin:-2px 0 10px">Articoli con una quantità sotto zero (una vendita è passata quando il conteggio diceva zero) o segnati «da ricontare». Conta i pezzi veri e scrivi i numeri: la correzione resta nel registro.</div>
+  <div id="rcBody"></div>
+  <div class="acts"><button type="button" class="btn p" id="rcClose">Chiudi</button></div>
+</div></div>
+<div class="ov" id="rcCountOv" style="z-index:5450"><div class="sheet" style="max-width:460px">
+  <h3 id="rcName">Conta</h3>
+  <div id="rcNow" class="hint" style="margin:0 0 8px"></div>
+  <label>Pezzi veri in NEGOZIO</label><input id="rcNeg" inputmode="numeric" autocomplete="off" placeholder="Quanti ne hai contati?">
+  <label>Pezzi veri in MAGAZZINO</label><input id="rcMag" inputmode="numeric" autocomplete="off" placeholder="Quanti ne hai contati?">
+  <div class="ferr" id="rcErr"></div>
+  <div class="acts"><button type="button" class="btn" id="rcCancel">Annulla</button><button type="button" class="btn p" id="rcSave">Salva il conteggio</button></div>
+</div></div>
+
 <!-- Da rifornire: pezzi venduti da riportare dal magazzino al negozio -->
 <div class="ov" id="rifOv" style="z-index:5300"><div class="sheet wide">
   <h3>📦 Da rifornire</h3>
@@ -1008,6 +1028,7 @@ function buildTiles(){
   t.push({e:'🛒',n:'Vendite',d:'Registra cosa si vende, per turno',act:openVend});
   t.push({e:'🔁',n:'Sposta',d:'Tra magazzino e negozio',act:function(){ openMove(null); }});
   t.push({e:'📦',n:'Da rifornire',d:'Magliette e felpe vendute da riportare in negozio',k:'rif',act:openRif});
+  if(role==='titolare') t.push({e:'🔢',n:'Da ricontare',d:'Articoli con quantità da verificare',k:'rc',act:openRc});
   if(role==='titolare'){
     t.push({e:'📋',n:'Registro movimenti',d:'Chi ha spostato cosa e quando',act:openLog});
     t.push({e:'📈',n:'Oggi',d:'Vendite in diretta e chiusura giornata',act:openOggi});
@@ -1033,7 +1054,7 @@ function startProducts(){
     products = snap.docs.map(function(d){ var o=d.data(); o.id=d.id; return o; });
     byId={}; products.forEach(function(p){ byId[p.id]=p; });
     fillCatSelects();
-    renderResults();
+    renderResults(); rcUi();
     if(mv && $('#moveOv').classList.contains('show')) renderMove();
   }, function(err){
     console.warn('prodotti:',err.code);
@@ -1551,6 +1572,29 @@ function startStaff(){
   },function(err){ console.warn('personale:',err.code); });
 }
 function openSettings(){ renderStaff(); renderDist(); $('#staffErr').textContent=''; $('#setOv').classList.add('show'); }
+/* ── Copia di sicurezza: un solo file JSON con tutti i dati (senza PIN, foto e fatture) ── */
+function bkPlain(v){
+  if(v && v.toDate) return v.toDate().toISOString();
+  if(Array.isArray(v)) return v.map(bkPlain);
+  if(v && typeof v==='object'){ var o={}; Object.keys(v).forEach(function(k){ o[k]=bkPlain(v[k]); }); return o; }
+  return v;
+}
+function bkCol(name,strip){
+  return fdb.collection(name).get().then(function(snap){ return snap.docs.map(function(d){ var o=bkPlain(d.data()); (strip||[]).forEach(function(k){ delete o[k]; }); o.id=d.id; return o; }); });
+}
+$('#bkGo').onclick=function(){
+  var btn=this, msg=$('#bkMsg'); btn.disabled=true; msg.textContent='Sto raccogliendo i dati…';
+  var cols=['prodotti','distributori','movimenti','vendite','turni','giornate','rifornimenti','fatture'], out={creata:new Date().toISOString(),versione:1};
+  Promise.all(cols.map(function(c){ return bkCol(c); }).concat([bkCol('personale',['pinHash','salt','pin'])])).then(function(r){
+    cols.forEach(function(c,i){ out[c]=r[i]; }); out.personale=r[cols.length];
+    // prezzi di acquisto (documenti privati, uno per articolo)
+    return Promise.all(out.prodotti.map(function(p){ return fdb.doc('prodotti/'+p.id+'/privato/costo').get().then(function(d){ if(d.exists) p.prezzoAcquisto=d.data().prezzoAcquisto; }).catch(function(){}); }));
+  }).then(function(){
+    var blob=new Blob([JSON.stringify(out)],{type:'application/json'}), url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download='edicola-copia-dati-'+isoDay(new Date())+'.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); },2000);
+    msg.textContent='Copia scaricata: '+out.prodotti.length+' articoli, '+out.vendite.length+' vendite, '+out.movimenti.length+' spostamenti.'; btn.disabled=false;
+  }).catch(function(er){ console.warn('copia:',er&&er.code); msg.textContent='Copia non riuscita. Controlla la connessione e riprova.'; btn.disabled=false; });
+};
 $('#setClose').onclick=function(){ $('#setOv').classList.remove('show'); };
 function renderStaff(){
   $('#staffList').innerHTML = staff.length ? staff.map(function(s){
@@ -1588,6 +1632,47 @@ $('#staffAdd').addEventListener('submit',function(e){
     .then(function(){ f.reset(); toast(nome+' aggiunto.'); })
     .catch(function(er){ err.textContent = er&&er.message==='nocrypto' ? 'Questo browser non supporta la cifratura del PIN (serve una connessione HTTPS).' : 'Non salvato. Controlla la connessione.'; });
 });
+
+/* ── Da ricontare: giacenze negative o segnate «da ricontare»; l'ultimo conteggio vince e resta nel registro come correzione ── */
+function rcList(){ return products.filter(function(p){ return (p.qtaNegozio|0)<0 || (p.qtaMagazzino|0)<0 || p.daRicontare; }).sort(function(a,b){ return String(a.nome).localeCompare(String(b.nome),'it'); }); }
+function rcUi(){
+  var t=document.querySelector('#tiles .tile[data-k="rc"]');
+  if(t){ var b=t.querySelector('.tbadge'), n=rcList().length; if(n&&!b){ b=document.createElement('span'); b.className='tbadge'; t.appendChild(b); } if(b){ if(n) b.textContent=n; else b.remove(); } }
+  if($('#rcOv').classList.contains('show')) rcRender();
+}
+function rcRender(){
+  var list=rcList();
+  $('#rcBody').innerHTML = list.length ? list.map(function(p){
+    var n=p.qtaNegozio|0, m=p.qtaMagazzino|0;
+    return '<div class="rifrow"><div class="rf-i"><div class="nm">'+esc(p.nome)+'</div><div class="rf-q">negozio <b'+(n<0?' style="color:var(--danger)"':'')+'>'+n+'</b> · magazzino <b'+(m<0?' style="color:var(--danger)"':'')+'>'+m+'</b>'+(p.daRicontare?' · segnato «da ricontare»'+(p.ricontareNota?': '+esc(p.ricontareNota):''):'')+'</div></div>'
+      +'<button type="button" class="btn p" data-rc="'+esc(p.id)+'">Conta</button></div>';
+  }).join('') : '<div class="empty" style="padding:30px 10px">✅ <b>Tutto a posto.</b><br>Nessun articolo da ricontare.</div>';
+}
+var rcId=null;
+function openRc(){ rcRender(); $('#rcOv').classList.add('show'); }
+$('#rcClose').onclick=function(){ $('#rcOv').classList.remove('show'); };
+$('#rcBody').addEventListener('click',function(e){
+  var b=e.target.closest('[data-rc]'); if(!b) return; var p=byId[b.dataset.rc]; if(!p) return;
+  rcId=p.id; $('#rcName').textContent=p.nome; $('#rcNow').textContent='Il sistema dice: negozio '+(p.qtaNegozio|0)+' · magazzino '+(p.qtaMagazzino|0)+'.';
+  $('#rcNeg').value=''; $('#rcMag').value=''; $('#rcErr').textContent=''; $('#rcCountOv').classList.add('show'); setTimeout(function(){ $('#rcNeg').focus(); },50);
+});
+$('#rcCancel').onclick=function(){ $('#rcCountOv').classList.remove('show'); rcId=null; };
+$('#rcSave').onclick=function(){
+  var p=byId[rcId]; if(!p) return;
+  function cnt(v){ v=String(v).trim(); return /^\d{1,6}$/.test(v) ? parseInt(v,10) : null; }
+  var neg=cnt($('#rcNeg').value), mag=cnt($('#rcMag').value);
+  if(neg===null || mag===null){ $('#rcErr').textContent='Scrivi due numeri (anche 0): i pezzi veri in negozio e in magazzino.'; return; }
+  var F=firebase.firestore.FieldValue, b=fdb.batch(), upd={daRicontare:false,ricontareNota:'',aggiornatoIl:F.serverTimestamp()}, log={id:p.id,nome:p.nome,codiceProdotto:p.codiceProdotto||''}, fixed=[];
+  [['negozio',neg],['magazzino',mag]].forEach(function(x){
+    var cur=p[NOMEQ[x[0]]]|0, d=x[1]-cur; if(!d) return;
+    upd[NOMEQ[x[0]]]=F.increment(d); fixed.push(x[0]+' '+(d>0?'+':'')+d);
+    b.set(fdb.collection('movimenti').doc(),movDoc(log,{tipo:'rettifica',luogo:x[0],delta:d,qta:Math.abs(d),nota:'Ricontato'},null));
+  });
+  b.update(fdb.doc('prodotti/'+p.id),upd);
+  var sv=this; sv.disabled=true;
+  commitFast(b).then(function(r){ sv.disabled=false; $('#rcCountOv').classList.remove('show'); rcId=null; toast(r.queued?QUEUED_MSG:'Conteggio salvato'+(fixed.length?' ('+fixed.join(', ')+')':' (nessuna differenza)')+'.'); })
+    .catch(function(er){ sv.disabled=false; $('#rcErr').textContent = er&&er.code==='permission-denied' ? 'Permesso negato dal database.' : 'Non salvato. Controlla la connessione e riprova.'; });
+};
 
 /* ── Da rifornire: quello che si vende (magliette, per ora) va riportato dal magazzino al negozio ── */
 function isRiforn(p){ return !!p && /t-?shirt|maglia|maglie|felpa|felpe/i.test(String(p.categoria||'')+' '+String(p.nome||'')); }
