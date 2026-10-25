@@ -1735,6 +1735,7 @@ function rifBuild(){
       (o.righe||[]).forEach(function(l){ if(l.id && !l.libero && byId[l.id] && isRiforn(byId[l.id])) add(l.id,t,l.qta|0,true); }); });
     r[1].docs.forEach(function(d){ var o=d.data(); if(o.da==='magazzino' && o.a==='negozio' && o.prodottoId) add(o.prodottoId,(tsDate(o.quando)||new Date(0)).getTime(),o.qta|0,false); });
     var F=firebase.firestore.FieldValue, b=fdb.batch(), added=0, lines=0;
+    Object.keys(rif).forEach(function(id){ if(!ev[id]) ev[id]=[]; });   // righe rimaste in lista senza vendite nel periodo (es. contate da un ricalcolo più largo): si azzerano
     Object.keys(ev).forEach(function(id){
       var floor=rifDa[id]||0, p=0;
       ev[id].filter(function(e){ return e.t>floor; }).sort(function(a,b){ return (a.t-b.t) || ((b.sale?1:0)-(a.sale?1:0)); })
@@ -1742,7 +1743,7 @@ function rifBuild(){
       var cur=rif[id]?rif[id].qta:0;
       if(p!==cur){
         if(p>cur) added+=p-cur; lines++;
-        var rec={nome:byId[id].nome,qta:p,aggiornato:F.serverTimestamp()}; if(rifDa[id]) rec.da=rifDa[id];
+        var rec={nome:(byId[id]?byId[id].nome:(rif[id]?rif[id].nome:'')),qta:p,aggiornato:F.serverTimestamp()}; if(rifDa[id]) rec.da=rifDa[id];
         if(p>0 || rifDa[id]) b.set(fdb.doc('rifornimenti/'+id),rec); else b.delete(fdb.doc('rifornimenti/'+id));
       }
     });
