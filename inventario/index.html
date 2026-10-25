@@ -762,10 +762,10 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 <!-- Da rifornire: pezzi venduti da riportare dal magazzino al negozio -->
 <div class="ov" id="rifOv" style="z-index:5300"><div class="sheet wide">
   <h3>📦 Da rifornire</h3>
-  <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette e felpe vendute ieri o oggi: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce. La lista si crea quando la titolare chiude la giornata.</div>
+  <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette e felpe vendute ieri o oggi: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce. La lista si riempie man mano che si vende.</div>
   <div id="rifBody"></div>
-  <div id="rifFix" class="hidden"><div class="hint" style="margin:10px 2px 4px">La lista si crea alla chiusura della giornata (in Oggi). Per aggiornarla subito:</div>
-    <button type="button" class="btn" id="rifRebuild">↻ Aggiorna la lista ora</button></div>
+  <div id="rifFix" class="hidden"><div class="hint" style="margin:10px 2px 4px">La lista si riempie man mano che si vende e viene ricontrollata alla chiusura della giornata. Per ricontrollarla subito:</div>
+    <button type="button" class="btn" id="rifRebuild">↻ Ricontrolla la lista</button></div>
   <div class="acts"><button type="button" class="btn p" id="rifClose">Chiudi</button></div>
 </div></div>
 
@@ -1605,6 +1605,15 @@ function rifUi(){
   var vb=$('#vendRif'), nn=rifTotal(); vb.textContent='📦 Da rifornire: '+nn; vb.classList.toggle('hidden',!(nn && vs.shift));
   if($('#rifOv').classList.contains('show')) rifRender();
 }
+// Ogni vendita di magliette/felpe aggiunge subito i pezzi alla lista. Segnato DOPO che la vendita è andata a buon fine (e separato):
+// se le regole del database non sono aggiornate la vendita non ne risente. La chiusura della giornata (o «Aggiorna la lista») ricontrolla tutto in ordine di tempo.
+function rifAdd(righe){
+  var agg={}; (righe||[]).forEach(function(l){ var p=l.id&&byId[l.id]; if(p && !l.libero && isRiforn(p)){ (agg[l.id]=agg[l.id]||{nome:p.nome,n:0}).n+=l.qta|0; } });
+  var ids=Object.keys(agg); if(!ids.length) return;
+  var F=firebase.firestore.FieldValue, b=fdb.batch();
+  ids.forEach(function(id){ b.set(fdb.doc('rifornimenti/'+id),{nome:agg[id].nome,qta:F.increment(agg[id].n),aggiornato:F.serverTimestamp()},{merge:true}); });
+  b.commit().catch(function(er){ console.warn('rifornimenti +:',er&&er.code); });
+}
 function rifDec(id,n){
   var c=rif[id]; if(!c || !(n>0)) return;
   var left=Math.max(0,c.qta-n), ref=fdb.doc('rifornimenti/'+id), F=firebase.firestore.FieldValue, da=rifDa[id];
@@ -1625,12 +1634,13 @@ function rifRender(){
     : '<div class="empty" style="padding:30px 10px">✅ <b>Tutto rifornito.</b><br>Non c\'è niente da riportare in negozio.</div>';
 }
 function openRif(){ rifRender(); $('#rifFix').classList.toggle('hidden',role!=='titolare'); $('#rifOv').classList.add('show'); }
-// La lista si crea quando la titolare CHIUDE LA GIORNATA, rifacendo il conto in ordine di tempo sugli ultimi 14 giorni:
+// Ricontrollo (alla chiusura della giornata o col pulsante «Ricontrolla la lista»): rifà il conto in ordine di tempo sugli ultimi 14 giorni:
 // ogni vendita di magliette/felpe aggiunge i pezzi, ogni spostamento Magazzino→Negozio li toglie (mai sotto zero).
 // Così uno spostamento fatto PRIMA della vendita (es. al mattino, per riempire lo scaffale) non cancella la vendita, e rifarlo non duplica niente.
-var RIF_DAYS=14;
+var RIF_DAYS=14, RIF_FROM='2026-10-24';   // la lista è in uso dal 24/10: le vendite di prima non sono mai finite in nessuna lista e non si ricostruiscono
 function rifBuild(){
   var from=new Date(); from.setHours(0,0,0,0); from.setDate(from.getDate()-RIF_DAYS);
+  var start=new Date(RIF_FROM+'T00:00:00'); if(from<start) from=start;
   return Promise.all([
     fdb.collection('vendite').where('giorno','>=',isoDay(from)).get(),
     fdb.collection('movimenti').where('quando','>=',firebase.firestore.Timestamp.fromDate(from)).get()
@@ -2876,7 +2886,7 @@ $('#vtGo').onclick=function(){
   vs.cart.forEach(function(l){ if(l.libero||!byId[l.id]) return; b.update(fdb.doc('prodotti/'+l.id),{qtaNegozio:F.increment(-l.qta),aggiornatoIl:F.serverTimestamp(),ultimaVenditaId:id}); });
   vs.busy=true; vtRender();
   commitFast(b).then(function(r){
-    vs.busy=false; vs.cart=[]; vtRender(); vsClearSearch();
+    vs.busy=false; vs.cart=[]; vtRender(); vsClearSearch(); rifAdd(righe);
     toast(r.queued?QUEUED_MSG:'Venduto: '+t.pz+(t.pz===1?' pezzo':' pezzi')+' · '+money(t.tot));
   }).catch(function(er){
     vs.busy=false; vtRender(); console.warn('vendita:',er&&er.code);
@@ -2904,7 +2914,7 @@ function vendCancel(r,who){
   var F=firebase.firestore.FieldValue, b=fdb.batch();
   b.update(fdb.doc('vendite/'+r.id),{annullata:true,annullataIl:F.serverTimestamp(),annullataDa:who||'Titolare'});
   (r.righe||[]).forEach(function(l){ if(l.libero||!l.id||!byId[l.id]) return; b.update(fdb.doc('prodotti/'+l.id),{qtaNegozio:F.increment(l.qta|0),aggiornatoIl:F.serverTimestamp(),ultimaVenditaId:r.id}); });
-  commitFast(b).then(function(x){ toast(x.queued?QUEUED_MSG:'Vendita annullata: i pezzi sono tornati in negozio.'); })
+  commitFast(b).then(function(x){ toast(x.queued?QUEUED_MSG:'Vendita annullata: i pezzi sono tornati in negozio.'); (r.righe||[]).forEach(function(l){ if(l.id && !l.libero) rifDec(l.id,l.qta|0); }); })
     .catch(function(er){ toast(er&&er.code==='permission-denied'?'Non si può annullare: sono passati più di '+CANCEL_MIN+' minuti o la giornata è chiusa.':'Annullamento non riuscito. Riprova.'); });
 }
 
@@ -2925,7 +2935,7 @@ $('#vendEnd').onclick=function(){
   $('#sumBody').innerHTML='<div style="font-size:15px;line-height:1.5"><b>'+esc(sh.staffNome)+'</b> · '+esc(sh.postazione)+'<br><span style="color:var(--espresso-2)">'+esc(dayLabel(sh.giorno))+' · dalle '+hhmm(new Date(sh.aperto))+' alle '+hhmm(new Date())+'</span></div>'
     +'<div class="og-kpis"><div class="kpi"><div class="l">Pezzi</div><div class="v">'+fmtN(pz)+'</div></div><div class="kpi"><div class="l">Vendite</div><div class="v">'+ok.length+'</div></div><div class="kpi"><div class="l">Totale</div><div class="v">'+money(round2(tot))+'</div></div></div>'
     +(items.length?tbl(['Articolo','Pezzi','Totale'],items.map(function(a){ return [esc(a.nome)+(a.codice?' <span style="color:var(--espresso-2)">'+esc(a.codice)+'</span>':''),fmtN(a.qta),money(round2(a.tot))]; }),[1,2]):'<div class="none">Nessuna vendita in questo turno.</div>');
-  var rt=0;   // la lista si crea alla chiusura della giornata: niente avviso qui
+  var rt=rifTotal();
   $('#sumRif').innerHTML = rt ? '<div class="repwarn" style="margin-top:14px">📦 Ci sono <b>'+rt+(rt===1?' pezzo':' pezzi')+'</b> da riportare dal magazzino al negozio.<br><button type="button" class="btn p" id="sumRifGo" style="margin-top:8px">Apri la lista da rifornire</button></div>' : '';
   $('#sumOv').classList.add('show');
 };
