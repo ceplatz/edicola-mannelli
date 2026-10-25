@@ -762,7 +762,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 <!-- Da rifornire: pezzi venduti da riportare dal magazzino al negozio -->
 <div class="ov" id="rifOv" style="z-index:5300"><div class="sheet wide">
   <h3>📦 Da rifornire</h3>
-  <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette vendute ieri o oggi: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce. La lista si crea quando la titolare chiude la giornata.</div>
+  <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette e felpe vendute ieri o oggi: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce. La lista si crea quando la titolare chiude la giornata.</div>
   <div id="rifBody"></div>
   <div id="rifFix" class="hidden"><div class="hint" style="margin:10px 2px 4px">La lista si crea alla chiusura della giornata (in Oggi). Per farla subito con le vendite di oggi:</div>
     <button type="button" class="btn" id="rifRebuild">↻ Crea la lista con le vendite di oggi</button></div>
@@ -1007,7 +1007,7 @@ function buildTiles(){
   if(role==='titolare') t.push({e:'➕',n:'Nuovo prodotto',d:'Aggiungi un articolo',act:function(){ openForm(null); }});
   t.push({e:'🛒',n:'Vendite',d:'Registra cosa si vende, per turno',act:openVend});
   t.push({e:'🔁',n:'Sposta',d:'Tra magazzino e negozio',act:function(){ openMove(null); }});
-  t.push({e:'📦',n:'Da rifornire',d:'Magliette vendute da riportare in negozio',k:'rif',act:openRif});
+  t.push({e:'📦',n:'Da rifornire',d:'Magliette e felpe vendute da riportare in negozio',k:'rif',act:openRif});
   if(role==='titolare'){
     t.push({e:'📋',n:'Registro movimenti',d:'Chi ha spostato cosa e quando',act:openLog});
     t.push({e:'📈',n:'Oggi',d:'Vendite in diretta e chiusura giornata',act:openOggi});
@@ -1590,7 +1590,7 @@ $('#staffAdd').addEventListener('submit',function(e){
 });
 
 /* ── Da rifornire: quello che si vende (magliette, per ora) va riportato dal magazzino al negozio ── */
-function isRiforn(p){ return !!p && /t-?shirt|maglia|maglie/i.test(String(p.categoria||'')+' '+String(p.nome||'')); }
+function isRiforn(p){ return !!p && /t-?shirt|maglia|maglie|felpa|felpe/i.test(String(p.categoria||'')+' '+String(p.nome||'')); }
 function startRif(){
   if(unsubRif) unsubRif();
   unsubRif=fdb.collection('rifornimenti').onSnapshot(function(snap){
