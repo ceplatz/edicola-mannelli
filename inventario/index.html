@@ -118,6 +118,7 @@ main{width:100%;max-width:1000px;margin:0 auto;padding:18px 20px 40px}
 .tile .ds{font-size:12px;color:var(--espresso-2);line-height:1.25}
 .tile .soon{position:absolute;top:10px;right:10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--gold);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
 .tile .tbadge{position:absolute;top:10px;right:10px;min-width:24px;height:24px;padding:0 7px;border-radius:999px;background:var(--coral);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.mvas{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--sand-2);font-size:16px}
 .rifrow{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);margin:8px 0}
 .rifrow .rf-i{flex:1;min-width:0}
 .rifrow .nm{font-weight:700;font-size:16px}
@@ -668,7 +669,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 <div class="ov" id="setOv"><div class="sheet wide">
   <h3>Impostazioni</h3>
   <label style="margin-top:0">Personale</label>
-  <p class="hint" style="margin:2px 0 6px">Chi può spostare merce. Il personale inserisce il proprio PIN di 4 cifre a ogni spostamento. Lasciando il PIN vuoto, la persona compare solo quando entri come titolare (per te e la famiglia).</p>
+  <p class="hint" style="margin:2px 0 6px">Chi può spostare merce. Il personale inserisce il proprio PIN di 4 cifre UNA volta (aprendo il turno, o al primo spostamento): poi tutti gli spostamenti di quel dispositivo vengono registrati a suo nome, finché non tocca «Cambia persona», chiude il turno, cambia il giorno o passano 2 ore senza attività. Lasciando il PIN vuoto, la persona compare solo quando entri come titolare (per te e la famiglia).</p>
   <div id="staffList"></div>
   <form id="staffAdd" autocomplete="off" style="margin-top:14px">
     <label>Aggiungi dipendente</label>
@@ -1006,7 +1007,7 @@ $('#loginForm').addEventListener('submit',function(e){
   });
 });
 $('#logoutBtn').addEventListener('click',function(){
-  if(confirm('Vuoi uscire?')) auth.signOut().then(function(){ location.reload(); });
+  if(confirm('Vuoi uscire?')){ sesClear(); auth.signOut().then(function(){ location.reload(); }); }
 });
 
 function onUser(user){
@@ -1796,12 +1797,29 @@ function renderMove(){
     $('#mvMax').textContent = max ? 'disponibili in '+srcName+': '+max
       : (mag+neg===0 ? 'Questo articolo non ha pezzi: non c\'è nulla da spostare.'
          : 'In '+srcName+' non ci sono pezzi da spostare ('+otherHave+' in '+otherName+').');
-    var who=whoChoices();
+    var who=whoChoices(), ses=sesGet();
+    if(ses && !mv.who) mv.who=who.filter(function(s){ return s.id===ses.id; })[0]||null;
+    if(ses && mv.who && mv.who.id===ses.id){
+      $('#mvWho').innerHTML='<div class="mvas">Sposti come <b>'+esc(mv.who.nome)+'</b> <button type="button" class="btn" id="mvChangeWho" style="padding:6px 12px;font-size:13px">Cambia persona</button></div>';
+    } else
     $('#mvWho').innerHTML = who.length ? who.map(function(s){ return '<button type="button" class="chip'+(mv.who&&mv.who.id===s.id?' sel':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('')
       : '<div class="hint">Nessun dipendente configurato. Il titolare deve aggiungerli in Impostazioni.</div>';
   }
   updGo();
 }
+/* ── Chi sposta: ci si identifica UNA volta (PIN) e tutti gli spostamenti di questo dispositivo vanno a nome suo ──
+   Vale finché non si tocca «Cambia persona», non si chiude il turno, cambia il giorno o passano 2 ore senza attività.
+   Più persone insieme = più dispositivi (o «Cambia persona» sullo stesso): ognuno ha la propria identità. */
+var SES_KEY='edicola.persona', SES_IDLE=2*3600*1000;
+function sesKey(){ return SES_KEY+'.'+role; }
+function sesGet(){
+  var s=lsGet(sesKey()); if(!s || !s.id) return null;
+  if(s.day!==isoDay(new Date()) || Date.now()-(s.t||0)>SES_IDLE){ lsSet(sesKey(),null); return null; }
+  var m=whoChoices().filter(function(x){ return x.id===s.id; })[0]; return m ? {id:m.id,nome:m.nome} : null;
+}
+function sesSet(w){ if(w) lsSet(sesKey(),{id:w.id,nome:w.nome,day:isoDay(new Date()),t:Date.now()}); }
+function sesTouch(){ var s=lsGet(sesKey()); if(s && s.id){ s.t=Date.now(); lsSet(sesKey(),s); } }
+function sesClear(){ lsSet(sesKey(),null); }
 // Personale: solo chi ha un PIN. Titolare: tutti i nomi, senza PIN (ha già fatto l'accesso). Senza nomi, il titolare può comunque lavorare come «Titolare».
 function whoChoices(){
   if(role==='personale') return staff.filter(function(s){ return s.pinHash; });
@@ -1830,11 +1848,16 @@ function updGo(){ $('#mvGo').disabled=!(mv && mv.prod && mv.qty>=1 && mv.qty<=sr
 $('#mvQty').addEventListener('input',function(){ var n=parseInt(this.value,10); mv.qty=isFinite(n)?Math.max(0,Math.min(n,srcQty())):0; updGo(); });
 // niente renderMove() qui: ridisegnerebbe i nomi mentre li si sta toccando e il tocco andrebbe perso
 $('#mvQty').addEventListener('blur',function(){ if(!mv) return; var max=srcQty(); if(mv.qty<1 && max>0) mv.qty=1; this.value=mv.qty; updGo(); });
-$('#mvWho').addEventListener('click',function(e){ var b=e.target.closest('.chip'); if(!b) return; mv.who=whoChoices().filter(function(s){return s.id===b.dataset.id;})[0]||null; renderMove(); });
+$('#mvWho').addEventListener('click',function(e){
+  if(e.target.id==='mvChangeWho'){ sesClear(); if(mv){ mv.who=null; renderMove(); } return; }
+  var b=e.target.closest('.chip'); if(!b) return; mv.who=whoChoices().filter(function(s){return s.id===b.dataset.id;})[0]||null; renderMove(); });
 $('#mvCancel').onclick=function(){ $('#moveOv').classList.remove('show'); mv=null; };
 $('#mvGo').onclick=function(){
   if(!mv.who) return;
-  if(role==='titolare') doMove(); else askPin(mv.who,doMove);
+  if(role==='titolare'){ sesSet(mv.who); doMove(); return; }
+  var ses=sesGet();
+  if(ses && ses.id===mv.who.id) doMove();                                   // già identificato: niente PIN
+  else askPin(mv.who,function(){ sesSet(mv.who); doMove(); });              // PIN una volta sola
 };
 function doMove(){
   if(!isOnline()){ $('#mvErr').textContent='Senza rete non si può spostare merce: il controllo delle quantità richiede il collegamento. Riprova quando il segnale torna.'; return; }
@@ -1856,7 +1879,7 @@ function doMove(){
     });
   }).then(function(){
     clearTimeout(waitT); finished=true; $('#moveOv').classList.remove('show'); mv=null; toast('Spostato — '+msg);
-    if(from==='magazzino') rifDec(p.id,n);
+    sesTouch(); if(from==='magazzino') rifDec(p.id,n);
   }).catch(function(er){
     clearTimeout(waitT); finished=true; go.disabled=false; console.warn('sposta:',er&&er.code);
     var code=er&&er.code, label=from==='magazzino'?'Magazzino':'Negozio';
@@ -2764,7 +2787,7 @@ function vendEndedRemotely(){
 $('#vendLeave').onclick=function(){
   var sh=vs.shift; if(!sh) return;
   if(vs.cartTimer){ clearTimeout(vs.cartTimer); cartPush(); }
-  vs.shift=null; lsSet(shiftKey(),null); vs.cart=[]; vs.cartSent='[]'; vs.tab='cerca'; vendStop(); vendRender();
+  if(role==='personale') sesClear(); vs.shift=null; lsSet(shiftKey(),null); vs.cart=[]; vs.cartSent='[]'; vs.tab='cerca'; vendStop(); vendRender();
   toast('Turno di '+sh.staffNome+' lasciato aperto: lo riprendi dall\'elenco qui sotto.');
 };
 $('#vendExit').onclick=function(){ $('#vendOv').classList.remove('show'); vendStop(); };
@@ -2804,6 +2827,7 @@ function peekRender(){
   }).join('')+'<div class="hint" style="margin-top:6px">Riprendere un turno non cancella niente: le vendite già registrate restano, e il carrello in corso si ritrova qui.</div></div>' : '';
 }
 function takeShift(x){
+  if(role==='personale') sesSet({id:x.staffId,nome:x.staffNome});   // PIN già chiesto per riprendere il turno
   vs.shift={id:x.id,staffId:x.staffId,staffNome:x.staffNome,postazione:x.postazione,giorno:x.giorno,ruolo:role,aperto:(shiftStart(x)||Date.now())};
   closeDupes(x);
   lsSet(shiftKey(),vs.shift); vs.cart=[]; vs.cartSent='[]'; vs.tab='cerca'; vs.day=isoDay(new Date()); vendRender(); vendStart();
@@ -2829,6 +2853,7 @@ $('#voPost').addEventListener('input',updVo);
 $('#voGo').onclick=function(){ if(!vs.voWho) return; if(role==='titolare') vendOpenShift(); else askPin(vs.voWho,vendOpenShift); };
 function vendOpenShift(){
   var w=vs.voWho; if(!w) return;
+  if(role==='personale') sesSet(w);   // il PIN è già stato inserito per aprire il turno
   var ex=openShiftsOf(w.id)[0];
   if(ex){ takeShift(ex); toast('Hai già un turno aperto: ripreso, con il suo carrello.'); return; }   // mai due turni aperti per la stessa persona
   var id=fdb.collection('turni').doc().id, post=$('#voPost').value.trim().slice(0,30)||'Cassa', F=firebase.firestore.FieldValue, now=new Date();
@@ -2972,7 +2997,7 @@ $('#vtGo').onclick=function(){
   vs.cart.forEach(function(l){ if(l.libero||!byId[l.id]) return; b.update(fdb.doc('prodotti/'+l.id),{qtaNegozio:F.increment(-l.qta),aggiornatoIl:F.serverTimestamp(),ultimaVenditaId:id}); });
   vs.busy=true; vtRender();
   commitFast(b).then(function(r){
-    vs.busy=false; vs.cart=[]; vtRender(); vsClearSearch(); rifAdd(righe);
+    vs.busy=false; vs.cart=[]; vtRender(); vsClearSearch(); rifAdd(righe); sesTouch();
     toast(r.queued?QUEUED_MSG:'Venduto: '+t.pz+(t.pz===1?' pezzo':' pezzi')+' · '+money(t.tot));
   }).catch(function(er){
     vs.busy=false; vtRender(); console.warn('vendita:',er&&er.code);
@@ -3015,7 +3040,7 @@ $('#vendEnd').onclick=function(){
   var sh=vs.shift, mine=vs.sales.filter(function(r){ return r.turnoId===sh.id; });
   vs.ending=true;
   var pr=fdb.doc('turni/'+sh.id).update({chiusoIl:firebase.firestore.FieldValue.serverTimestamp()}); trackWrite(pr); pr.catch(function(er){ console.warn('chiusura turno:',er&&er.code); });
-  cartDrop(sh); vs.shift=null; lsSet(shiftKey(),null); vs.cart=[]; vendStop(); vs.ending=false; vendRender();
+  cartDrop(sh); if(role==='personale') sesClear(); vs.shift=null; lsSet(shiftKey(),null); vs.cart=[]; vendStop(); vs.ending=false; vendRender();
   var ok=mine.filter(function(r){ return !r.annullata; }), pz=0, tot=0; ok.forEach(function(r){ pz+=r.pezzi|0; tot+=r.totale||0; });
   var items=sumByItem(mine);
   $('#sumBody').innerHTML='<div style="font-size:15px;line-height:1.5"><b>'+esc(sh.staffNome)+'</b> · '+esc(sh.postazione)+'<br><span style="color:var(--espresso-2)">'+esc(dayLabel(sh.giorno))+' · dalle '+hhmm(new Date(sh.aperto))+' alle '+hhmm(new Date())+'</span></div>'
