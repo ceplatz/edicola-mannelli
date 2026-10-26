@@ -114,6 +114,8 @@ main{width:100%;max-width:1000px;margin:0 auto;padding:18px 20px 40px}
 .tile:hover{box-shadow:var(--shadow);border-color:var(--peach)}
 .tile:active{transform:scale(.96)}
 .tile .emoji{font-size:32px;line-height:1}
+.tile .emoji.ser{position:relative;width:fit-content}
+.tile .emoji.ser .eb{position:absolute;right:-8px;bottom:-5px;width:20px;height:20px;border-radius:50%;box-shadow:0 0 0 2px var(--sand-3)}
 .tile .nm{font-weight:700;font-size:15px;line-height:1.2}
 .tile .ds{font-size:12px;color:var(--espresso-2);line-height:1.25}
 .tile .soon{position:absolute;top:10px;right:10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--gold);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
@@ -1048,7 +1050,7 @@ function buildTiles(){
   if(role==='titolare') t.push({e:'➕',n:'Nuovo prodotto',d:'Aggiungi un articolo',act:function(){ openForm(null); }});
   t.push({e:'🛒',n:'Vendite',d:'Registra cosa si vende, per turno',act:openVend});
   t.push({e:'🔁',n:'Sposta',d:'Tra magazzino e negozio',act:function(){ openMove(null); }});
-  t.push({e:'📋',n:'Sposta in serie',d:'Scansiona tanti articoli e spostali insieme',act:function(){ openSerie(); }});
+  t.push({e:'🔁',ser:1,n:'Sposta in serie',d:'Scansiona tanti articoli e spostali insieme',act:function(){ openSerie(); }});   // stessa icona di «Sposta» + bollino rosa con l'elenco
   t.push({e:'📦',n:'Da rifornire',d:'Magliette e felpe vendute da riportare in negozio',k:'rif',act:openRif});
   if(role==='titolare') t.push({e:'🔢',n:'Da ricontare',d:'Articoli con quantità da verificare',k:'rc',act:openRc});
   if(role==='titolare'){
@@ -1061,7 +1063,7 @@ function buildTiles(){
   var box=$('#tiles'); box.innerHTML='';
   t.forEach(function(x){
     var b=document.createElement('button'); b.className='tile'; b.type='button';
-    b.innerHTML='<span class="emoji">'+x.e+'</span><span class="nm">'+esc(x.n)+'</span><span class="ds">'+esc(x.d)+'</span>'+(x.soon?'<span class="soon">Presto</span>':'');
+    b.innerHTML='<span class="emoji'+(x.ser?' ser':'')+'">'+x.e+(x.ser?'<svg class="eb" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#F0527A"/><path d="M5.5 7h9M5.5 10h9M5.5 13h9" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>':'')+'</span><span class="nm">'+esc(x.n)+'</span><span class="ds">'+esc(x.d)+'</span>'+(x.soon?'<span class="soon">Presto</span>':'');
     if(x.k){ b.dataset.k=x.k; }
     b.onclick = x.act || function(){ toast('«'+x.n+'» arriverà presto.'); };
     box.appendChild(b);
