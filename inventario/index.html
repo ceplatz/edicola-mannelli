@@ -118,6 +118,12 @@ main{width:100%;max-width:1000px;margin:0 auto;padding:18px 20px 40px}
 .tile .ds{font-size:12px;color:var(--espresso-2);line-height:1.25}
 .tile .soon{position:absolute;top:10px;right:10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--gold);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
 .tile .tbadge{position:absolute;top:10px;right:10px;min-width:24px;height:24px;padding:0 7px;border-radius:999px;background:var(--coral);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.srrow{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);margin:8px 0}
+.srrow.bad{border-color:#e3b4b4;background:#fdf0f0}
+.srrow .rf-i{flex:1;min-width:0}
+.srrow .nm{font-weight:700;font-size:16px}
+.srrow .rf-q{font-size:13px;color:var(--espresso-2);margin-top:2px}
+.srrow .stepper input{width:60px}
 .mvas{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--sand-2);font-size:16px}
 .rifrow{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);margin:8px 0}
 .rifrow .rf-i{flex:1;min-width:0}
@@ -764,6 +770,19 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 </div></div>
 
 <!-- Vendite: riepilogo del turno -->
+<!-- Sposta in serie: tanti articoli, un solo spostamento -->
+<div class="ov" id="srOv" style="z-index:5350"><div class="sheet wide">
+  <h3>📋 Sposta in serie</h3>
+  <div class="seg" id="srDir"><button type="button" data-d="mn" class="on">Magazzino → Negozio</button><button type="button" data-d="nm">Negozio → Magazzino</button></div>
+  <label>Scansiona con la pistola (o scrivi il nome)</label>
+  <div class="with-scan"><input id="srQ" placeholder="Scansiona un articolo…" autocomplete="off" inputmode="search" enterkeyhint="done"><button type="button" class="icon-btn" id="srScan" aria-label="Scansiona con la fotocamera">📷</button></div>
+  <div class="results" id="srRes"></div>
+  <div id="srList"></div>
+  <div id="srWhoWrap"><label>Chi sposta?</label><div class="chips" id="srWho"></div></div>
+  <div class="ferr" id="srErr"></div>
+  <div class="acts"><button type="button" class="btn" id="srClear">Svuota l'elenco</button><button type="button" class="btn" id="srClose">Chiudi</button><button type="button" class="btn p" id="srGo" disabled>Sposta</button></div>
+</div></div>
+
 <!-- Da ricontare: articoli con giacenza negativa o segnati «da ricontare» (titolare) -->
 <div class="ov" id="rcOv" style="z-index:5300"><div class="sheet wide">
   <h3>🔢 Da ricontare</h3>
@@ -785,6 +804,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <h3>📦 Da rifornire</h3>
   <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette e felpe vendute ieri o oggi: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce. La lista si riempie man mano che si vende.</div>
   <div id="rifBody"></div>
+  <div class="acts" style="justify-content:flex-start;margin-top:8px"><button type="button" class="btn" id="rifSerie">📋 Sposta tutto in serie</button></div>
   <div id="rifFix" class="hidden"><div class="hint" style="margin:10px 2px 4px">La lista si riempie man mano che si vende e viene ricontrollata alla chiusura della giornata. Per ricontrollarla subito:</div>
     <button type="button" class="btn" id="rifRebuild">↻ Ricontrolla la lista</button></div>
   <div class="acts"><button type="button" class="btn p" id="rifClose">Chiudi</button></div>
@@ -1028,6 +1048,7 @@ function buildTiles(){
   if(role==='titolare') t.push({e:'➕',n:'Nuovo prodotto',d:'Aggiungi un articolo',act:function(){ openForm(null); }});
   t.push({e:'🛒',n:'Vendite',d:'Registra cosa si vende, per turno',act:openVend});
   t.push({e:'🔁',n:'Sposta',d:'Tra magazzino e negozio',act:function(){ openMove(null); }});
+  t.push({e:'📋',n:'Sposta in serie',d:'Scansiona tanti articoli e spostali insieme',act:function(){ openSerie(); }});
   t.push({e:'📦',n:'Da rifornire',d:'Magliette e felpe vendute da riportare in negozio',k:'rif',act:openRif});
   if(role==='titolare') t.push({e:'🔢',n:'Da ricontare',d:'Articoli con quantità da verificare',k:'rc',act:openRc});
   if(role==='titolare'){
@@ -1057,6 +1078,7 @@ function startProducts(){
     fillCatSelects();
     renderResults(); rcUi();
     if(mv && $('#moveOv').classList.contains('show')) renderMove();
+    if($('#srOv').classList.contains('show')) srRender();
   }, function(err){
     console.warn('prodotti:',err.code);
     toast(err.code==='permission-denied' ? 'Permessi mancanti: pubblica le regole del database (vedi firestore.rules).' : 'Errore nel caricamento dei prodotti.');
@@ -1767,6 +1789,138 @@ $('#rifBody').addEventListener('click',function(e){
   if(g){ var p=byId[g.dataset.go], c=rif[g.dataset.go]; if(!p||!c) return; openMove(p); mv.dir='mn'; mv.qty=Math.max(1,Math.min(c.qta,p.qtaMagazzino|0)); renderMove(); }
   else if(d && role==='titolare'){ var id=d.dataset.del, c2=rif[id]; if(c2 && confirm('Togliere «'+c2.nome+'» ('+c2.qta+' pezzi) dalla lista da rifornire?')){ delete rif[id]; rifDa[id]=Date.now(); fdb.doc('rifornimenti/'+id).set({nome:c2.nome,qta:0,da:rifDa[id],aggiornato:firebase.firestore.FieldValue.serverTimestamp()}).catch(function(){}); rifUi(); } }
 });
+
+/* ── Sposta in serie: si scansionano molti articoli e si spostano tutti insieme (un solo PIN, una sola conferma) ── */
+var sr={dir:'mn',lines:[],who:null,busy:false,skipped:{}}, SR_MAX=200;
+function beep(ok){
+  try{ var C=window.AudioContext||window.webkitAudioContext; if(!C) return; var a=beep.c||(beep.c=new C()), o=a.createOscillator(), g=a.createGain();
+    o.frequency.value=ok?880:200; g.gain.value=.06; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+(ok?.07:.25)); }catch(e){}
+}
+function srKey(){ return 'edicola.serie.'+role; }
+function srSave(){ lsSet(srKey(),{day:isoDay(new Date()),dir:sr.dir,lines:sr.lines.map(function(l){ return {id:l.id,qta:l.qta}; })}); }
+function srLoad(){
+  var s=lsGet(srKey()); sr.lines=[]; sr.dir='mn'; sr.skipped={};
+  if(s && s.day===isoDay(new Date()) && s.lines){ sr.dir=s.dir==='nm'?'nm':'mn'; s.lines.forEach(function(l){ if(byId[l.id] && (l.qta|0)>0) sr.lines.push({id:l.id,qta:l.qta|0}); }); }
+}
+function srAvail(p){ return ((sr.dir==='mn'?p.qtaMagazzino:p.qtaNegozio)|0); }
+function srSrc(){ return sr.dir==='mn'?'in magazzino':'in negozio'; }
+function srAdd(p,n){
+  var av=srAvail(p), l=sr.lines.filter(function(x){ return x.id===p.id; })[0];
+  if(av<1){ beep(false); $('#srErr').textContent='«'+p.nome+'»: non ce n\'è '+srSrc()+'.'; return false; }
+  if(!l && sr.lines.length>=SR_MAX){ beep(false); $('#srErr').textContent='Massimo '+SR_MAX+' articoli per volta: conferma questi e poi continua.'; return false; }
+  if(l){ if(l.qta>=av){ beep(false); $('#srErr').textContent='«'+p.nome+'»: '+srSrc()+' ce ne sono solo '+av+'.'; return false; } l.qta=Math.min(av,l.qta+(n||1)); }
+  else sr.lines.unshift({id:p.id,qta:Math.min(av,n||1)});
+  $('#srErr').textContent=''; delete sr.skipped[p.id]; srSave(); srRender(); beep(true); return true;
+}
+function srFindExact(q){ var k=norm(q); return products.filter(function(p){ return CODE_KEYS.some(function(c){ return p[c] && norm(p[c])===k; }) || codeSame(p,q); })[0]; }
+function srRender(){
+  sr.lines=sr.lines.filter(function(l){ return byId[l.id]; });
+  var pcs=sr.lines.reduce(function(a,l){ return a+l.qta; },0);
+  $('#srList').innerHTML = sr.lines.length ? '<div class="hint" style="margin:10px 2px 6px"><b>'+pcs+(pcs===1?' pezzo':' pezzi')+'</b> in '+sr.lines.length+(sr.lines.length===1?' articolo':' articoli')+' · '+(sr.dir==='mn'?'da magazzino a negozio':'da negozio a magazzino')+'</div>'
+    +sr.lines.map(function(l){ var p=byId[l.id], av=srAvail(p), bad=l.qta>av, sk=sr.skipped[l.id];
+      return '<div class="srrow'+(bad||sk?' bad':'')+'" data-id="'+esc(l.id)+'"><div class="rf-i"><div class="nm">'+esc(p.nome)+'</div><div class="rf-q">disponibili '+srSrc()+': <b>'+av+'</b>'+(sk?' · <span style="color:var(--danger)">'+esc(sk)+'</span>':(bad?' · <span style="color:var(--danger)">ne hai messi di più</span>':''))+'</div></div>'
+        +'<div class="stepper" style="margin:0"><button type="button" data-a="m" aria-label="Meno">−</button><input data-a="q" inputmode="numeric" value="'+l.qta+'" aria-label="Quantità"><button type="button" data-a="p" aria-label="Più">+</button></div>'
+        +'<button type="button" class="btn" data-a="x" aria-label="Togli">✕</button></div>'; }).join('')
+    : '<div class="empty" style="padding:26px 10px">Scansiona il primo articolo.<br><span class="hint">Ogni scansione aggiunge 1 pezzo; scansionalo di nuovo per aggiungerne altri.</span></div>';
+  var ses=sesGet(), who=whoChoices();
+  if(ses && !sr.who) sr.who=who.filter(function(s){ return s.id===ses.id; })[0]||null;
+  if(ses && sr.who && sr.who.id===ses.id) $('#srWho').innerHTML='<div class="mvas">Sposti come <b>'+esc(sr.who.nome)+'</b> <button type="button" class="btn" id="srChangeWho" style="padding:6px 12px;font-size:13px">Cambia persona</button></div>';
+  else $('#srWho').innerHTML = who.length ? who.map(function(s){ return '<button type="button" class="chip'+(sr.who&&sr.who.id===s.id?' sel':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('') : '<div class="hint">Nessun dipendente configurato.</div>';
+  Array.prototype.forEach.call(document.querySelectorAll('#srDir button'),function(b){ b.classList.toggle('on',b.dataset.d===sr.dir); });
+  var ok=sr.lines.length && sr.who && !sr.busy && sr.lines.every(function(l){ return l.qta>=1 && l.qta<=srAvail(byId[l.id]); });
+  $('#srGo').disabled=!ok; $('#srGo').textContent = sr.lines.length ? 'Sposta '+pcs+(pcs===1?' pezzo':' pezzi') : 'Sposta';
+}
+function openSerie(preset){
+  srLoad(); if(preset){ sr.dir='mn'; sr.lines=preset; srSave(); }
+  sr.who=null; $('#srQ').value=''; $('#srRes').innerHTML=''; $('#srErr').textContent=''; srRender(); $('#srOv').classList.add('show');
+  setTimeout(function(){ $('#srQ').focus(); },60);
+}
+$('#srClose').onclick=function(){ $('#srOv').classList.remove('show'); };
+$('#srClear').onclick=function(){ if(sr.lines.length && !confirm('Svuotare l\'elenco ('+sr.lines.length+' articoli)?')) return; sr.lines=[]; sr.skipped={}; srSave(); srRender(); $('#srQ').focus(); };
+$('#srDir').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b || b.dataset.d===sr.dir) return;
+  sr.dir=b.dataset.d; var dropped=0; sr.lines=sr.lines.filter(function(l){ var av=srAvail(byId[l.id]); if(av<1){ dropped++; return false; } if(l.qta>av) l.qta=av; return true; });
+  if(dropped) toast(dropped+(dropped===1?' articolo tolto':' articoli tolti')+': non ce n\'è '+srSrc()+'.'); srSave(); srRender(); });
+$('#srQ').addEventListener('input',function(){
+  var q=norm(this.value); $('#srErr').textContent='';
+  if(!q || looksLikeBarcode(this.value)){ $('#srRes').innerHTML=''; return; }
+  var list=products.filter(function(p){ return matches(p,q); }).sort(function(a,b){ return rank(a,q)-rank(b,q) || String(a.nome).localeCompare(String(b.nome),'it'); }).slice(0,6);
+  $('#srRes').innerHTML = list.length ? list.map(function(p){ return '<button type="button" class="res" data-id="'+esc(p.id)+'"><div class="info"><div class="nm">'+esc(p.nome)+'</div></div><div class="qty">'+pills(p)+'</div></button>'; }).join('') : '<div class="empty" style="padding:12px">Nessun risultato.</div>';
+});
+$('#srQ').addEventListener('keydown',function(e){
+  if(e.key!=='Enter') return; e.preventDefault();
+  var raw=this.value.trim(); if(!raw) return;
+  var hit=srFindExact(raw);
+  if(!hit){ var q=norm(raw), m=products.filter(function(p){ return matches(p,q); }); if(m.length===1 && !looksLikeBarcode(raw)) hit=m[0]; }
+  if(hit){ srAdd(hit,1); this.value=''; $('#srRes').innerHTML=''; }
+  else { beep(false); $('#srErr').textContent = looksLikeBarcode(raw) ? 'Codice '+raw+': nessun articolo. Collegalo dalla ricerca principale.' : 'Scegli l\'articolo dall\'elenco qui sotto.'; if(looksLikeBarcode(raw)) this.value=''; }
+});
+$('#srRes').addEventListener('click',function(e){ var b=e.target.closest('.res'); if(b && byId[b.dataset.id]){ srAdd(byId[b.dataset.id],1); $('#srQ').value=''; $('#srRes').innerHTML=''; $('#srQ').focus(); } });
+$('#srScan').onclick=function(){ scan().then(function(c){ if(!c) return; var hit=srFindExact(c); if(hit) srAdd(hit,1); else { beep(false); $('#srErr').textContent='Codice '+c+': nessun articolo.'; } }); };
+$('#srList').addEventListener('click',function(e){
+  var b=e.target.closest('[data-a]'); if(!b || b.tagName==='INPUT') return; var row=b.closest('.srrow'), l=sr.lines.filter(function(x){ return x.id===row.dataset.id; })[0]; if(!l) return;
+  var av=srAvail(byId[l.id]);
+  if(b.dataset.a==='x') sr.lines=sr.lines.filter(function(x){ return x!==l; });
+  else if(b.dataset.a==='m'){ if(l.qta>1) l.qta--; else sr.lines=sr.lines.filter(function(x){ return x!==l; }); }
+  else if(b.dataset.a==='p'){ if(l.qta<av) l.qta++; else { beep(false); $('#srErr').textContent='«'+byId[l.id].nome+'»: '+srSrc()+' ce ne sono solo '+av+'.'; } }
+  srSave(); srRender();
+});
+$('#srList').addEventListener('change',function(e){
+  var inp=e.target; if(inp.tagName!=='INPUT') return; var row=inp.closest('.srrow'), l=sr.lines.filter(function(x){ return x.id===row.dataset.id; })[0]; if(!l) return;
+  var n=parseInt(inp.value,10); if(!isFinite(n)||n<1) sr.lines=sr.lines.filter(function(x){ return x!==l; }); else l.qta=Math.min(n,srAvail(byId[l.id]));
+  srSave(); srRender();
+});
+$('#srWho').addEventListener('click',function(e){
+  if(e.target.id==='srChangeWho'){ sesClear(); sr.who=null; srRender(); return; }
+  var b=e.target.closest('.chip'); if(!b) return; sr.who=whoChoices().filter(function(s){ return s.id===b.dataset.id; })[0]||null; srRender();
+});
+$('#srGo').onclick=function(){
+  if(!sr.who || !sr.lines.length) return;
+  if(role==='titolare'){ sesSet(sr.who); srDo(); return; }
+  var ses=sesGet();
+  if(ses && ses.id===sr.who.id) srDo(); else askPin(sr.who,function(){ sesSet(sr.who); srDo(); });
+};
+function srDo(){
+  if(!isOnline()){ $('#srErr').textContent='Senza rete non si può spostare merce. Riprova quando torna il segnale.'; return; }
+  var dir=sr.dir, from=dir==='mn'?'magazzino':'negozio', to=dir==='mn'?'negozio':'magazzino', fFrom=NOMEQ[from], fTo=NOMEQ[to], who=sr.who, F=firebase.firestore.FieldValue;
+  var lines=sr.lines.filter(function(l){ return l.qta>0 && byId[l.id]; }).map(function(l){ return {id:l.id,n:l.qta,p:byId[l.id]}; });
+  if(!lines.length) return;
+  sr.busy=true; srRender(); $('#srErr').textContent='';
+  // Tutto in un'unica operazione sul database: per ogni articolo la quantità viene riletta nel momento dello spostamento.
+  // Se per un articolo non bastano più i pezzi (altro tablet), quell'articolo viene saltato e gli altri vanno a buon fine.
+  fdb.runTransaction(function(tx){
+    return Promise.all(lines.map(function(x){ return tx.get(fdb.doc('prodotti/'+x.id)); })).then(function(snaps){
+      var done=[], skipped=[];
+      snaps.forEach(function(sn,i){
+        var x=lines[i]; if(!sn.exists){ skipped.push({id:x.id,why:'l\'articolo non esiste più'}); return; }
+        var d=sn.data(), have=d[fFrom]|0;
+        if(x.n<1 || have<x.n){ skipped.push({id:x.id,why:'ora '+srSrc()+' ce ne sono '+have}); return; }
+        var upd={aggiornatoIl:F.serverTimestamp()}; upd[fFrom]=have-x.n; upd[fTo]=(d[fTo]|0)+x.n;
+        tx.update(fdb.doc('prodotti/'+x.id),upd);
+        tx.set(fdb.collection('movimenti').doc(),{prodottoId:x.id,prodottoNome:x.p.nome,codice:x.p.codiceProdotto||'',da:from,a:to,qta:x.n,staffId:who.id,staffNome:who.nome,ruolo:role,quando:F.serverTimestamp()});
+        done.push(x);
+      });
+      return {done:done,skipped:skipped};
+    });
+  }).then(function(res){
+    sr.busy=false; sesTouch();
+    var okIds={}; res.done.forEach(function(x){ okIds[x.id]=x; if(dir==='mn') rifDec(x.id,x.n); });
+    sr.lines=sr.lines.filter(function(l){ return !okIds[l.id]; });
+    sr.skipped={}; res.skipped.forEach(function(k){ sr.skipped[k.id]=k.why; });
+    srSave(); srRender();
+    var pcs=res.done.reduce(function(a,x){ return a+x.n; },0);
+    if(!res.skipped.length){ toast('Spostati '+pcs+(pcs===1?' pezzo':' pezzi')+' ('+res.done.length+(res.done.length===1?' articolo':' articoli')+') '+from+' → '+to+'.'); $('#srOv').classList.remove('show'); }
+    else { toast('Spostati '+pcs+' pezzi. '+res.skipped.length+(res.skipped.length===1?' articolo NON spostato':' articoli NON spostati')+': sono rimasti nell\'elenco.'); $('#srErr').textContent=res.skipped.length+(res.skipped.length===1?' articolo non spostato':' articoli non spostati')+' (quantità cambiata nel frattempo): controlla le righe in rosso.'; }
+  }).catch(function(er){
+    sr.busy=false; srRender(); console.warn('serie:',er&&er.code);
+    $('#srErr').textContent = er&&er.code==='permission-denied' ? 'Spostamento rifiutato dal database. Riprova; se continua, avvisa il titolare.' : 'Spostamento NON eseguito (manca la connessione). Gli articoli sono ancora nell\'elenco: riprova.';
+  });
+}
+// dalla lista «Da rifornire»: tutti i pezzi che si possono riportare, in un colpo solo
+$('#rifSerie').onclick=function(){
+  var lines=Object.keys(rif).filter(function(id){ return byId[id] && (byId[id].qtaMagazzino|0)>0; }).map(function(id){ return {id:id,qta:Math.min(rif[id].qta,byId[id].qtaMagazzino|0)}; });
+  if(!lines.length){ toast('Niente da spostare: in magazzino non ci sono pezzi di quelli da rifornire.'); return; }
+  $('#rifOv').classList.remove('show'); openSerie(lines);
+};
 
 /* ── Sposta merce ── */
 var mv=null, pinTry=0, pinLock=0;
