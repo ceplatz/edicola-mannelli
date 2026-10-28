@@ -208,7 +208,8 @@ service cloud.firestore {
       allow create: if (titolare() || personale())
         && nuovo().keys().hasOnly(
              ['prodottoId', 'prodottoNome', 'codice', 'da', 'a', 'qta',
-              'staffId', 'staffNome', 'ruolo', 'quando', 'quandoLocale', 'tipo', 'nota', 'luogo', 'delta'])
+              'staffId', 'staffNome', 'ruolo', 'quando', 'quandoLocale', 'tipo', 'nota', 'luogo', 'delta', 'scopo'])
+        && (!('scopo' in nuovo()) || nuovo().scopo == 'extra')
         && nuovo().quando == request.time
         && nuovo().qta is int && nuovo().qta > 0
         && nuovo().get('nota', '') is string && nuovo().get('nota', '').size() <= 120

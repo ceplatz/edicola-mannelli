@@ -120,13 +120,16 @@ main{width:100%;max-width:1000px;margin:0 auto;padding:18px 20px 40px}
 .tile .ds{font-size:12px;color:var(--espresso-2);line-height:1.25}
 .tile .soon{position:absolute;top:10px;right:10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--gold);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
 .tile .tbadge{position:absolute;top:10px;right:10px;min-width:24px;height:24px;padding:0 7px;border-radius:999px;background:var(--coral);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center}
-.srrow{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);margin:8px 0}
+.srrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);margin:8px 0}
 .srrow.bad{border-color:#e3b4b4;background:#fdf0f0}
 .srrow .rf-i{flex:1;min-width:0}
 .srrow .nm{font-weight:700;font-size:16px}
 .srrow .rf-q{font-size:13px;color:var(--espresso-2);margin-top:2px}
 .srrow .stepper input{width:60px}
 .mvas{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--sand-2);font-size:16px}
+.rifh{border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);padding:10px 12px;margin:8px 0}
+.rifh .nm{font-weight:700;font-size:15px}
+.rifh .rl{font-size:13px;margin-top:3px;line-height:1.35}
 .rifrow{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);margin:8px 0}
 .rifrow .rf-i{flex:1;min-width:0}
 .rifrow .nm{font-weight:700;font-size:16px}
@@ -617,6 +620,8 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
     <div class="seg" id="mvDir"><button type="button" data-d="mn" class="on">Magazzino → Negozio</button><button type="button" data-d="nm">Negozio → Magazzino</button></div>
     <label>Quantità</label>
     <div class="stepper"><button type="button" id="mvMinus" aria-label="Meno">−</button><input id="mvQty" inputmode="numeric" value="1"><button type="button" id="mvPlus" aria-label="Più">+</button><span class="mx" id="mvMax"></span></div>
+    <div id="mvRif" class="hidden"><div class="mvrif"><div class="hint" style="margin:0 0 6px">📦 Da rifornire: <b id="mvRifN"></b> venduti di questo articolo. Questo spostamento è…</div>
+      <div class="seg" id="mvRifSeg"><button type="button" data-s="r" class="on">Rifornisco la vendita</button><button type="button" data-s="x">È un pezzo in più</button></div></div></div>
     <div id="mvWhoWrap"><label>Chi sposta?</label><div class="chips" id="mvWho"></div></div>
     <div class="ferr" id="mvErr"></div>
   </div>
@@ -826,6 +831,10 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <div class="hint" id="rifHint" style="margin:-2px 0 10px">Magliette e felpe vendute ieri o oggi: riportale dal magazzino al negozio. Tocca «Sposta» su ogni riga: quando lo spostamento è fatto, la riga sparisce. La lista si riempie man mano che si vende.</div>
   <div id="rifBody"></div>
   <div class="acts" style="justify-content:flex-start;margin-top:8px"><button type="button" class="btn" id="rifSerie">📋 Sposta tutto in serie</button></div>
+  <div id="rifHistWrap" class="hidden">
+    <div class="acts" style="justify-content:flex-start;align-items:center;margin-top:14px"><button type="button" class="btn" id="rifHistBtn">🕘 Già rifornite</button><span id="rifHistSel" class="hidden" style="display:flex;gap:6px;align-items:center"><button type="button" class="chip sel" data-n="3">3 giorni</button><button type="button" class="chip" data-n="7">7 giorni</button><button type="button" class="chip" data-n="14">14 giorni</button></span></div>
+    <div id="rifHist"></div>
+  </div>
   <div id="rifFix" class="hidden"><div class="hint" style="margin:10px 2px 4px">La lista si riempie man mano che si vende e viene ricontrollata alla chiusura della giornata. Per ricontrollarla subito:</div>
     <button type="button" class="btn" id="rifRebuild">↻ Ricontrolla la lista</button></div>
   <div class="acts"><button type="button" class="btn p" id="rifClose">Chiudi</button></div>
@@ -1762,7 +1771,58 @@ function rifRender(){
           +(role==='titolare'?'<button type="button" class="btn" data-del="'+esc(id)+'" aria-label="Togli dalla lista" title="Togli dalla lista">✕</button>':'')+'</div>'; }).join('')
     : '<div class="empty" style="padding:30px 10px">✅ <b>Tutto rifornito.</b><br>Non c\'è niente da riportare in negozio.</div>';
 }
-function openRif(){ rifRender(); $('#rifFix').classList.toggle('hidden',role!=='titolare'); $('#rifOv').classList.add('show'); }
+function openRif(){ rifRender(); $('#rifFix').classList.toggle('hidden',role!=='titolare'); $('#rifHistWrap').classList.toggle('hidden',role!=='titolare'); $('#rifOv').classList.add('show'); }
+/* Già rifornite: lo storico di cosa è stato venduto e quando è stato riportato in negozio (si legge dal registro, quindi solo il titolare) */
+var rifHistDays=3, rifHistOn=false, rifLed=null, rifLedAt=0;
+function rifWhen(t){
+  var d=new Date(t), n=new Date(), t0=new Date(n.getFullYear(),n.getMonth(),n.getDate()), dd=Math.round((t0-new Date(d.getFullYear(),d.getMonth(),d.getDate()))/86400000);
+  return (dd===0?'oggi':dd===1?'ieri':pad2(d.getDate())+'/'+pad2(d.getMonth()+1))+' '+hhmm(d);
+}
+function rifLedger(){
+  var from=new Date(); from.setHours(0,0,0,0); from.setDate(from.getDate()-RIF_DAYS); var start=new Date(RIF_FROM+'T00:00:00'); if(from<start) from=start;
+  return Promise.all([
+    fdb.collection('vendite').where('giorno','>=',isoDay(from)).get(),
+    fdb.collection('movimenti').where('quando','>=',firebase.firestore.Timestamp.fromDate(from)).get()
+  ]).then(function(r){
+    var ev={}, names={}; function add(id,e){ (ev[id]=ev[id]||[]).push(e); }
+    r[0].docs.forEach(function(d){ var o=d.data(); if(o.annullata) return; var t=(tsDate(o.quando)||tsDate(o.quandoLocale)||new Date(0)).getTime();
+      (o.righe||[]).forEach(function(l){ if(l.id && !l.libero && byId[l.id] && isRiforn(byId[l.id])){ names[l.id]=l.nome; add(l.id,{t:t,q:l.qta|0,sale:true,who:o.staffNome||''}); } }); });
+    r[1].docs.forEach(function(d){ var o=d.data(); if(o.da==='magazzino' && o.a==='negozio' && o.prodottoId) add(o.prodottoId,{t:(tsDate(o.quando)||new Date(0)).getTime(),q:o.qta|0,sale:false,extra:o.scopo==='extra',who:o.staffNome||''}); });
+    var out={};
+    Object.keys(ev).forEach(function(id){
+      var floor=rifDa[id]||0, sales=[], extras=[];
+      ev[id].filter(function(e){ return e.t>floor; }).sort(function(a,b){ return (a.t-b.t) || ((b.sale?1:0)-(a.sale?1:0)); }).forEach(function(e){
+        if(e.sale){ sales.push({t:e.t,q:e.q,left:e.q,who:e.who,done:[]}); return; }
+        if(e.extra){ extras.push({t:e.t,q:e.q,who:e.who}); return; }
+        var rest=e.q; for(var i=0;i<sales.length && rest>0;i++){ var sl=sales[i]; if(sl.left>0){ var u=Math.min(sl.left,rest); sl.left-=u; rest-=u; sl.done.push({t:e.t,q:u,who:e.who}); } }
+        if(rest>0) extras.push({t:e.t,q:rest,who:e.who});
+      });
+      out[id]={nome:byId[id]?byId[id].nome:(names[id]||''),sales:sales,extras:extras};
+    });
+    return out;
+  });
+}
+function rifHistRender(){
+  var box=$('#rifHist'); if(!rifLed){ box.innerHTML='<div class="none">Caricamento…</div>'; return; }
+  var cut=new Date(); cut.setHours(0,0,0,0); cut.setDate(cut.getDate()-(rifHistDays-1)); cut=cut.getTime();
+  var ids=Object.keys(rifLed).sort(function(a,b){ return String(rifLed[a].nome).localeCompare(String(rifLed[b].nome),'it'); }), html='', n=0;
+  ids.forEach(function(id){
+    var it=rifLed[id], rows=it.sales.filter(function(s){ return s.t>=cut && s.done.length; }), ex=it.extras.filter(function(e){ return e.t>=cut; });
+    if(!rows.length && !ex.length) return; n+=rows.length;
+    html+='<div class="rifh"><div class="nm">'+esc(it.nome)+'</div>'+rows.map(function(s){
+      var dn=s.done.reduce(function(a,d){ return a+d.q; },0), last=s.done[s.done.length-1], whos=s.done.map(function(d){ return d.who; }).filter(function(w,i,a){ return w && a.indexOf(w)===i; }).join(', ');
+      return '<div class="rl">venduto <b>'+s.q+'</b> · '+rifWhen(s.t)+' → rifornito <b>'+dn+'</b> · '+rifWhen(last.t)+(whos?' · '+esc(whos):'')+(s.left>0?' <span class="tg rc">ancora da fare: '+s.left+'</span>':' <span style="color:#2a7a3b;font-weight:700">✓</span>')+'</div>';
+    }).join('')+ex.map(function(e){ return '<div class="rl" style="color:var(--espresso-2)">+'+e.q+' pezzo in più · '+rifWhen(e.t)+(e.who?' · '+esc(e.who):'')+'</div>'; }).join('')+'</div>';
+  });
+  box.innerHTML = html ? '<div class="hint" style="margin:8px 2px">Vendite degli ultimi '+rifHistDays+' giorni e quando sono state riportate in negozio (i pezzi ancora da fare restano nella lista qui sopra).</div>'+html : '<div class="none">Niente da mostrare negli ultimi '+rifHistDays+' giorni.</div>';
+}
+function rifHistLoad(force){
+  if(!force && rifLed && Date.now()-rifLedAt<60000){ rifHistRender(); return; }
+  rifLed=null; rifHistRender();
+  rifLedger().then(function(l){ rifLed=l; rifLedAt=Date.now(); if(rifHistOn) rifHistRender(); }).catch(function(er){ console.warn('storico rifornimenti:',er&&er.code); $('#rifHist').innerHTML='<div class="none">Impossibile leggere lo storico. Controlla la connessione.</div>'; });
+}
+$('#rifHistBtn').onclick=function(){ rifHistOn=!rifHistOn; $('#rifHistSel').classList.toggle('hidden',!rifHistOn); if(rifHistOn) rifHistLoad(true); else $('#rifHist').innerHTML=''; };
+$('#rifHistSel').addEventListener('click',function(e){ var b=e.target.closest('[data-n]'); if(!b) return; rifHistDays=+b.dataset.n; Array.prototype.forEach.call(document.querySelectorAll('#rifHistSel .chip'),function(x){ x.classList.toggle('sel',x===b); }); rifHistRender(); });
 // Ricontrollo (alla chiusura della giornata o col pulsante «Ricontrolla la lista»): rifà il conto in ordine di tempo sugli ultimi 14 giorni:
 // ogni vendita di magliette/felpe aggiunge i pezzi, ogni spostamento Magazzino→Negozio li toglie (mai sotto zero).
 // Così uno spostamento fatto PRIMA della vendita (es. al mattino, per riempire lo scaffale) non cancella la vendita, e rifarlo non duplica niente.
@@ -1777,7 +1837,7 @@ function rifBuild(){
     var ev={}; function add(id,t,q,sale){ (ev[id]=ev[id]||[]).push({t:t,q:q,sale:sale}); }
     r[0].docs.forEach(function(d){ var o=d.data(); if(o.annullata) return; var t=(tsDate(o.quando)||tsDate(o.quandoLocale)||new Date(0)).getTime();
       (o.righe||[]).forEach(function(l){ if(l.id && !l.libero && byId[l.id] && isRiforn(byId[l.id])) add(l.id,t,l.qta|0,true); }); });
-    r[1].docs.forEach(function(d){ var o=d.data(); if(o.da==='magazzino' && o.a==='negozio' && o.prodottoId) add(o.prodottoId,(tsDate(o.quando)||new Date(0)).getTime(),o.qta|0,false); });
+    r[1].docs.forEach(function(d){ var o=d.data(); if(o.da==='magazzino' && o.a==='negozio' && o.prodottoId && o.scopo!=='extra') add(o.prodottoId,(tsDate(o.quando)||new Date(0)).getTime(),o.qta|0,false); });   // gli spostamenti «pezzo in più» non contano come rifornimento
     var F=firebase.firestore.FieldValue, b=fdb.batch(), added=0, lines=0;
     Object.keys(rif).forEach(function(id){ if(!ev[id]) ev[id]=[]; });   // righe rimaste in lista senza vendite nel periodo (es. contate da un ricalcolo più largo): si azzerano
     Object.keys(ev).forEach(function(id){
@@ -1818,10 +1878,10 @@ function beep(ok){
     o.frequency.value=ok?880:200; g.gain.value=.06; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+(ok?.07:.25)); }catch(e){}
 }
 function srKey(){ return 'edicola.serie.'+role; }
-function srSave(){ lsSet(srKey(),{day:isoDay(new Date()),dir:sr.dir,lines:sr.lines.map(function(l){ return {id:l.id,qta:l.qta}; })}); }
+function srSave(){ lsSet(srKey(),{day:isoDay(new Date()),dir:sr.dir,lines:sr.lines.map(function(l){ return {id:l.id,qta:l.qta,extra:!!l.extra}; })}); }
 function srLoad(){
   var s=lsGet(srKey()); sr.lines=[]; sr.dir='mn'; sr.skipped={};
-  if(s && s.day===isoDay(new Date()) && s.lines){ sr.dir=s.dir==='nm'?'nm':'mn'; s.lines.forEach(function(l){ if(byId[l.id] && (l.qta|0)>0) sr.lines.push({id:l.id,qta:l.qta|0}); }); }
+  if(s && s.day===isoDay(new Date()) && s.lines){ sr.dir=s.dir==='nm'?'nm':'mn'; s.lines.forEach(function(l){ if(byId[l.id] && (l.qta|0)>0) sr.lines.push({id:l.id,qta:l.qta|0,extra:!!l.extra}); }); }
 }
 function srAvail(p){ return ((sr.dir==='mn'?p.qtaMagazzino:p.qtaNegozio)|0); }
 function srSrc(){ return sr.dir==='mn'?'in magazzino':'in negozio'; }
@@ -1841,7 +1901,8 @@ function srRender(){
     +sr.lines.map(function(l){ var p=byId[l.id], av=srAvail(p), bad=l.qta>av, sk=sr.skipped[l.id];
       return '<div class="srrow'+(bad||sk?' bad':'')+'" data-id="'+esc(l.id)+'"><div class="rf-i"><div class="nm">'+esc(p.nome)+'</div><div class="rf-q">disponibili '+srSrc()+': <b>'+av+'</b>'+(sk?' · <span style="color:var(--danger)">'+esc(sk)+'</span>':(bad?' · <span style="color:var(--danger)">ne hai messi di più</span>':''))+'</div></div>'
         +'<div class="stepper" style="margin:0"><button type="button" data-a="m" aria-label="Meno">−</button><input data-a="q" inputmode="numeric" value="'+l.qta+'" aria-label="Quantità"><button type="button" data-a="p" aria-label="Più">+</button></div>'
-        +'<button type="button" class="btn" data-a="x" aria-label="Togli">✕</button></div>'; }).join('')
+        +'<button type="button" class="btn" data-a="x" aria-label="Togli">✕</button>'
+        +((sr.dir==='mn' && rif[l.id])?'<div class="srrif" style="flex-basis:100%"><span class="hint">📦 da rifornire '+rif[l.id].qta+':</span> <button type="button" class="chip'+(l.extra?'':' sel')+'" data-a="r">Rifornisco</button><button type="button" class="chip'+(l.extra?' sel':'')+'" data-a="e">In più</button></div>':'')+'</div>'; }).join('')
     : '<div class="empty" style="padding:26px 10px">Scansiona il primo articolo.<br><span class="hint">Ogni scansione aggiunge 1 pezzo; scansionalo di nuovo per aggiungerne altri.</span></div>';
   var ses=sesGet(), who=whoChoices();
   if(ses && !sr.who) sr.who=who.filter(function(s){ return s.id===ses.id; })[0]||null;
@@ -1881,6 +1942,8 @@ $('#srList').addEventListener('click',function(e){
   var b=e.target.closest('[data-a]'); if(!b || b.tagName==='INPUT') return; var row=b.closest('.srrow'), l=sr.lines.filter(function(x){ return x.id===row.dataset.id; })[0]; if(!l) return;
   var av=srAvail(byId[l.id]);
   if(b.dataset.a==='x') sr.lines=sr.lines.filter(function(x){ return x!==l; });
+  else if(b.dataset.a==='r') l.extra=false;
+  else if(b.dataset.a==='e') l.extra=true;
   else if(b.dataset.a==='m'){ if(l.qta>1) l.qta--; else sr.lines=sr.lines.filter(function(x){ return x!==l; }); }
   else if(b.dataset.a==='p'){ if(l.qta<av) l.qta++; else { beep(false); $('#srErr').textContent='«'+byId[l.id].nome+'»: '+srSrc()+' ce ne sono solo '+av+'.'; } }
   srSave(); srRender();
@@ -1903,7 +1966,7 @@ $('#srGo').onclick=function(){
 function srDo(){
   if(!isOnline()){ $('#srErr').textContent='Senza rete non si può spostare merce. Riprova quando torna il segnale.'; return; }
   var dir=sr.dir, from=dir==='mn'?'magazzino':'negozio', to=dir==='mn'?'negozio':'magazzino', fFrom=NOMEQ[from], fTo=NOMEQ[to], who=sr.who, F=firebase.firestore.FieldValue;
-  var lines=sr.lines.filter(function(l){ return l.qta>0 && byId[l.id]; }).map(function(l){ return {id:l.id,n:l.qta,p:byId[l.id]}; });
+  var lines=sr.lines.filter(function(l){ return l.qta>0 && byId[l.id]; }).map(function(l){ return {id:l.id,n:l.qta,p:byId[l.id],extra:!!(l.extra && dir==='mn' && rif[l.id])}; });
   if(!lines.length) return;
   sr.busy=true; srRender(); $('#srErr').textContent='';
   // Tutto in un'unica operazione sul database: per ogni articolo la quantità viene riletta nel momento dello spostamento.
@@ -1917,14 +1980,14 @@ function srDo(){
         if(x.n<1 || have<x.n){ skipped.push({id:x.id,why:'ora '+srSrc()+' ce ne sono '+have}); return; }
         var upd={aggiornatoIl:F.serverTimestamp()}; upd[fFrom]=have-x.n; upd[fTo]=(d[fTo]|0)+x.n;
         tx.update(fdb.doc('prodotti/'+x.id),upd);
-        tx.set(fdb.collection('movimenti').doc(),{prodottoId:x.id,prodottoNome:x.p.nome,codice:x.p.codiceProdotto||'',da:from,a:to,qta:x.n,staffId:who.id,staffNome:who.nome,ruolo:role,quando:F.serverTimestamp()});
+        var mrec={prodottoId:x.id,prodottoNome:x.p.nome,codice:x.p.codiceProdotto||'',da:from,a:to,qta:x.n,staffId:who.id,staffNome:who.nome,ruolo:role,quando:F.serverTimestamp()}; if(x.extra) mrec.scopo='extra'; tx.set(fdb.collection('movimenti').doc(),mrec);
         done.push(x);
       });
       return {done:done,skipped:skipped};
     });
   }).then(function(res){
     sr.busy=false; sesTouch();
-    var okIds={}; res.done.forEach(function(x){ okIds[x.id]=x; if(dir==='mn') rifDec(x.id,x.n); });
+    var okIds={}; res.done.forEach(function(x){ okIds[x.id]=x; if(dir==='mn' && !x.extra) rifDec(x.id,x.n); });
     sr.lines=sr.lines.filter(function(l){ return !okIds[l.id]; });
     sr.skipped={}; res.skipped.forEach(function(k){ sr.skipped[k.id]=k.why; });
     srSave(); srRender();
@@ -1949,7 +2012,7 @@ function srcQty(){ return mv&&mv.prod ? ((mv.dir==='mn'?mv.prod.qtaMagazzino:mv.
 function pills(p){ return '<div class="pill'+((p.qtaNegozio|0)<=0?' z':'')+'">Negozio<b>'+(p.qtaNegozio|0)+'</b></div><div class="pill'+((p.qtaMagazzino|0)<=0?' z':'')+'">Magazzino<b>'+(p.qtaMagazzino|0)+'</b></div>'; }
 function bestDir(p){ return ((p.qtaMagazzino|0)>0 || !((p.qtaNegozio|0)>0)) ? 'mn' : 'nm'; }   // parte dal lato che ha pezzi
 function openMove(p){
-  mv={prod:p||null,dir:p?bestDir(p):'mn',qty:1,who:null};
+  mv={prod:p||null,dir:p?bestDir(p):'mn',qty:1,who:null,extra:false};
   $('#mvQ').value=''; $('#mvRes').innerHTML=''; $('#mvErr').textContent='';
   renderMove(); $('#moveOv').classList.add('show'); if(!p) setTimeout(function(){ $('#mvQ').focus(); },50);
 }
@@ -1972,6 +2035,9 @@ function renderMove(){
     $('#mvMax').textContent = max ? 'disponibili in '+srcName+': '+max
       : (mag+neg===0 ? 'Questo articolo non ha pezzi: non c\'è nulla da spostare.'
          : 'In '+srcName+' non ci sono pezzi da spostare ('+otherHave+' in '+otherName+').');
+    var rc=(mv.dir==='mn' && rif[p.id]) ? rif[p.id].qta : 0;
+    $('#mvRif').classList.toggle('hidden',!rc);
+    if(rc){ $('#mvRifN').textContent=rc+(rc===1?' pezzo':' pezzi'); Array.prototype.forEach.call(document.querySelectorAll('#mvRifSeg button'),function(b){ b.classList.toggle('on',(b.dataset.s==='x')===!!mv.extra); }); }
     var who=whoChoices(), ses=sesGet();
     if(ses && !mv.who) mv.who=who.filter(function(s){ return s.id===ses.id; })[0]||null;
     if(ses && mv.who && mv.who.id===ses.id){
@@ -2000,7 +2066,7 @@ function whoChoices(){
   if(role==='personale') return staff.filter(function(s){ return s.pinHash; });
   return staff.length ? staff : [{id:'titolare',nome:'Titolare'}];
 }
-function pickMoveProduct(p){ mv.prod=p; mv.dir=bestDir(p); mv.qty=1; $('#mvErr').textContent=''; renderMove(); }
+function pickMoveProduct(p){ mv.prod=p; mv.dir=bestDir(p); mv.qty=1; mv.extra=false; $('#mvErr').textContent=''; renderMove(); }
 $('#mvQ').addEventListener('input',function(){
   var q=norm(this.value);
   if(!q){ $('#mvRes').innerHTML=''; return; }
@@ -2016,6 +2082,7 @@ $('#mvScan').onclick=function(){ scan().then(function(c){
   if(hit) pickMoveProduct(hit); else { $('#mvQ').value=c; toast('Nessun prodotto con il codice '+c+'.'); }
 }); };
 $('#mvChange').onclick=function(){ mv.prod=null; renderMove(); $('#mvQ').value=''; $('#mvRes').innerHTML=''; setTimeout(function(){ $('#mvQ').focus(); },50); };
+$('#mvRifSeg').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b||!mv) return; mv.extra=b.dataset.s==='x'; renderMove(); });
 $('#mvDir').addEventListener('click',function(e){ var b=e.target.closest('button'); if(b){ mv.dir=b.dataset.d; mv.qty=1; renderMove(); } });
 $('#mvMinus').onclick=function(){ if(mv.qty>1){ mv.qty--; renderMove(); } };
 $('#mvPlus').onclick=function(){ if(mv.qty<srcQty()){ mv.qty++; renderMove(); } };
@@ -2036,7 +2103,7 @@ $('#mvGo').onclick=function(){
 };
 function doMove(){
   if(!isOnline()){ $('#mvErr').textContent='Senza rete non si può spostare merce: il controllo delle quantità richiede il collegamento. Riprova quando il segnale torna.'; return; }
-  var p=mv.prod, n=mv.qty|0, from=mv.dir==='mn'?'magazzino':'negozio', to=mv.dir==='mn'?'negozio':'magazzino';
+  var p=mv.prod, n=mv.qty|0, from=mv.dir==='mn'?'magazzino':'negozio', to=mv.dir==='mn'?'negozio':'magazzino', extra=!!(mv.extra && mv.dir==='mn' && rif[p.id]);
   var fFrom='qta'+from.charAt(0).toUpperCase()+from.slice(1), fTo='qta'+to.charAt(0).toUpperCase()+to.slice(1);
   var F=firebase.firestore.FieldValue, pref=fdb.doc('prodotti/'+p.id), mref=fdb.collection('movimenti').doc();
   var go=$('#mvGo'); go.disabled=true; $('#mvErr').textContent='';
@@ -2050,11 +2117,11 @@ function doMove(){
       if(n<1 || have<n) throw {code:'not-enough',have:have};
       var upd={aggiornatoIl:F.serverTimestamp()}; upd[fFrom]=have-n; upd[fTo]=(d[fTo]|0)+n;
       tx.update(pref,upd);
-      tx.set(mref,{prodottoId:p.id,prodottoNome:p.nome,codice:p.codiceProdotto||'',da:from,a:to,qta:n,staffId:mv.who.id,staffNome:mv.who.nome,ruolo:role,quando:F.serverTimestamp()});
+      var mrec={prodottoId:p.id,prodottoNome:p.nome,codice:p.codiceProdotto||'',da:from,a:to,qta:n,staffId:mv.who.id,staffNome:mv.who.nome,ruolo:role,quando:F.serverTimestamp()}; if(extra) mrec.scopo='extra'; tx.set(mref,mrec);
     });
   }).then(function(){
     clearTimeout(waitT); finished=true; $('#moveOv').classList.remove('show'); mv=null; toast('Spostato — '+msg);
-    sesTouch(); if(from==='magazzino') rifDec(p.id,n);
+    sesTouch(); if(from==='magazzino' && !extra) rifDec(p.id,n);
   }).catch(function(er){
     clearTimeout(waitT); finished=true; go.disabled=false; console.warn('sposta:',er&&er.code);
     var code=er&&er.code, label=from==='magazzino'?'Magazzino':'Negozio';
@@ -2081,7 +2148,7 @@ function movText(r){
   var k=movKind(r);
   if(k==='carico') return {kind:k, txt:'Carico · arrivati in '+LUOGO[r.a], q:'+'+(r.qta|0), cls:'up'};
   if(k==='rettifica') return {kind:k, txt:'Correzione della quantità in '+LUOGO[r.luogo], q:((r.delta|0)>0?'+':'−')+(r.qta|0), cls:(r.delta|0)>0?'up':'down'};
-  return {kind:k, txt:(r.da==='magazzino'?'Magazzino → Negozio':'Negozio → Magazzino'), q:String(r.qta|0), cls:''};
+  return {kind:k, txt:(r.da==='magazzino'?'Magazzino → Negozio':'Negozio → Magazzino')+(r.scopo==='extra'?' · pezzo in più':''), q:String(r.qta|0), cls:''};
 }
 // Cosa va rifatto, al contrario, per annullare una riga: campo → variazione
 function undoDeltas(r){
