@@ -130,6 +130,9 @@ main{width:100%;max-width:1000px;margin:0 auto;padding:18px 20px 40px}
 .rifh{border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);padding:10px 12px;margin:8px 0}
 .rifh .nm{font-weight:700;font-size:15px}
 .rifh .rl{font-size:13px;margin-top:3px;line-height:1.35}
+.rf-why{font-size:12px;color:var(--espresso-2);margin-top:3px;line-height:1.35}
+.rifsec{font-size:14px;margin:14px 2px 2px;color:var(--espresso)}
+.rifsec.late{color:#9a3b3b}
 .rifrow{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);margin:8px 0}
 .rifrow .rf-i{flex:1;min-width:0}
 .rifrow .nm{font-weight:700;font-size:16px}
@@ -1741,7 +1744,7 @@ function rifUi(){
   var t=document.querySelector('#tiles .tile[data-k="rif"]');
   if(t){ var b=t.querySelector('.tbadge'), n=rifTotal(); if(n&&!b){ b=document.createElement('span'); b.className='tbadge'; t.appendChild(b); } if(b){ if(n) b.textContent=n; else b.remove(); } }
   var vb=$('#vendRif'), nn=rifTotal(); vb.textContent='📦 Da rifornire: '+nn; vb.classList.toggle('hidden',!(nn && vs.shift));
-  if($('#rifOv').classList.contains('show')) rifRender();
+  if($('#rifOv').classList.contains('show')){ rifRender(); rifExplLoad(false); }
 }
 // Ogni vendita di magliette/felpe aggiunge subito i pezzi alla lista. Segnato DOPO che la vendita è andata a buon fine (e separato):
 // se le regole del database non sono aggiornate la vendita non ne risente. La chiusura della giornata (o «Aggiorna la lista») ricontrolla tutto in ordine di tempo.
@@ -1760,18 +1763,61 @@ function rifDec(id,n){
   (left>0||da ? ref.set(rec) : ref.delete()).catch(function(er){ console.warn('rifornimenti -:',er&&er.code); });
   rifUi();
 }
+/* Ogni riga spiega da dove viene il suo numero (venduti oggi / ieri / giorni prima) e le righe sono divise in «Arretrati» e «Di oggi».
+   Le vendite si leggono dal database (le vedono anche i dipendenti); l'ultimo spostamento in negozio, dal registro (solo titolare). */
+var rifSales=null, rifLast={}, rifExplAt=0;
+function rifDayWord(day){
+  var t0=isoDay(new Date()), y=new Date(); y.setDate(y.getDate()-1);
+  return day===t0?'oggi':day===isoDay(y)?'ieri':'il '+day.slice(8)+'/'+day.slice(5,7);
+}
+function rifExplLoad(force){
+  if(!force && rifSales && Date.now()-rifExplAt<30000) return;
+  rifExplAt=Date.now();
+  var from=new Date(); from.setHours(0,0,0,0); from.setDate(from.getDate()-RIF_DAYS); var start=new Date(RIF_FROM+'T00:00:00'); if(from<start) from=start;
+  var pv=fdb.collection('vendite').where('giorno','>=',isoDay(from)).get().then(function(snap){
+    var m={}; snap.docs.forEach(function(d){ var o=d.data(); if(o.annullata) return; var t=(tsDate(o.quando)||tsDate(o.quandoLocale)||new Date(0)).getTime();
+      (o.righe||[]).forEach(function(l){ if(l.id && !l.libero) (m[l.id]=m[l.id]||[]).push({day:o.giorno,t:t,q:l.qta|0}); }); });
+    Object.keys(m).forEach(function(k){ m[k].sort(function(a,b){ return b.t-a.t; }); });
+    rifSales=m;
+  });
+  var pm = role==='titolare' ? fdb.collection('movimenti').where('quando','>=',firebase.firestore.Timestamp.fromDate(from)).get().then(function(snap){
+    var m={}; snap.docs.forEach(function(d){ var o=d.data(); if(o.da==='magazzino' && o.a==='negozio' && o.prodottoId && o.scopo!=='extra'){ var t=(tsDate(o.quando)||new Date(0)).getTime(); if(!m[o.prodottoId]||t>m[o.prodottoId].t) m[o.prodottoId]={t:t,who:o.staffNome||''}; } });
+    rifLast=m;
+  }).catch(function(){ rifLast={}; }) : Promise.resolve();
+  Promise.all([pv,pm]).then(function(){ if($('#rifOv').classList.contains('show')) rifRender(); }).catch(function(er){ console.warn('spiegazione lista:',er&&er.code); });
+}
+// da quali vendite viene il numero: i pezzi ancora da fare sono quelli delle vendite più recenti
+function rifExplain(id,q){
+  var ev=(rifSales&&rifSales[id])||[], left=q, parts=[], oldest=null;
+  for(var i=0;i<ev.length && left>0;i++){ var u=Math.min(left,ev[i].q); left-=u; var last=parts[parts.length-1]; if(last && last.day===ev[i].day) last.q+=u; else parts.push({day:ev[i].day,q:u}); oldest=ev[i].day; }
+  return {parts:parts,older:left,oldest:oldest};
+}
 function rifRender(){
   var ids=Object.keys(rif).filter(function(id){ return byId[id]; }).sort(function(a,b){ return String(rif[a].nome).localeCompare(String(rif[b].nome),'it'); });
-  var tot=ids.reduce(function(a,id){ return a+rif[id].qta; },0);
-  $('#rifBody').innerHTML = ids.length
-    ? '<div class="hint" style="margin:0 2px 8px"><b>'+tot+(tot===1?' pezzo':' pezzi')+'</b> da riportare in negozio, in '+ids.length+(ids.length===1?' riga':' righe')+'.</div>'
-      +ids.map(function(id){ var p=byId[id], c=rif[id], mag=p.qtaMagazzino|0, take=Math.min(c.qta,mag);
-        return '<div class="rifrow"><div class="rf-i"><div class="nm">'+esc(p.nome)+'</div><div class="rf-q">da rifornire <b>×'+c.qta+'</b> · magazzino '+mag+' · negozio '+(p.qtaNegozio|0)+'</div></div>'
-          +(mag>0 ? '<button type="button" class="btn p" data-go="'+esc(id)+'">Sposta '+(take<c.qta?take+' di '+c.qta:take)+'</button>' : '<span class="hint" style="text-align:right">Non c\'è in magazzino</span>')
-          +(role==='titolare'?'<button type="button" class="btn" data-del="'+esc(id)+'" aria-label="Togli dalla lista" title="Togli dalla lista">✕</button>':'')+'</div>'; }).join('')
-    : '<div class="empty" style="padding:30px 10px">✅ <b>Tutto rifornito.</b><br>Non c\'è niente da riportare in negozio.</div>';
+  var tot=ids.reduce(function(a,id){ return a+rif[id].qta; },0), today=isoDay(new Date()), have=!!rifSales;
+  function row(id){
+    var p=byId[id], c=rif[id], mag=p.qtaMagazzino|0, take=Math.min(c.qta,mag), ex=have?rifExplain(id,c.qta):null, why='', last='', age='';
+    if(ex){
+      why=ex.parts.map(function(x){ return x.q+' '+rifDayWord(x.day); }).join(' · ')+(ex.older>0?(ex.parts.length?' · ':'')+ex.older+' più vecchi':'');
+      var lm=rifLast[id]; if(lm) last='Ultimo spostamento in negozio: '+rifWhen(lm.t)+(lm.who?' ('+lm.who+')':'');
+      if(ex.oldest && ex.oldest<today){ var dd=Math.round((new Date(today+'T12:00:00')-new Date(ex.oldest+'T12:00:00'))/86400000); age=' <span class="tg rc">da '+dd+(dd===1?' giorno':' giorni')+'</span>'; }
+    }
+    return '<div class="rifrow"><div class="rf-i"><div class="nm">'+esc(p.nome)+age+'</div><div class="rf-q">da rifornire <b>×'+c.qta+'</b> · magazzino '+mag+' · negozio '+(p.qtaNegozio|0)+'</div>'
+      +(why?'<div class="rf-why">Venduti: '+why+'</div>':'')+(last?'<div class="rf-why">'+esc(last)+'</div>':'')+'</div>'
+      +(mag>0 ? '<button type="button" class="btn p" data-go="'+esc(id)+'">Sposta '+(take<c.qta?take+' di '+c.qta:take)+'</button>' : '<span class="hint" style="text-align:right">Non c\'è in magazzino</span>')
+      +(role==='titolare'?'<button type="button" class="btn" data-del="'+esc(id)+'" aria-label="Togli dalla lista" title="Togli dalla lista">✕</button>':'')+'</div>';
+  }
+  var html;
+  if(!ids.length) html='<div class="empty" style="padding:30px 10px">✅ <b>Tutto rifornito.</b><br>Non c\'è niente da riportare in negozio.</div>';
+  else if(!have) html='<div class="hint" style="margin:0 2px 8px"><b>'+tot+(tot===1?' pezzo':' pezzi')+'</b> da riportare in negozio, in '+ids.length+(ids.length===1?' riga':' righe')+'.</div>'+ids.map(row).join('');
+  else {
+    var late=[], now=[]; ids.forEach(function(id){ var ex=rifExplain(id,rif[id].qta); (ex.older>0 || (ex.oldest && ex.oldest<today) ? late : now).push(id); });
+    function sec(title,list,cls){ if(!list.length) return ''; var n=list.reduce(function(a,id){ return a+rif[id].qta; },0); return '<div class="rifsec '+cls+'"><b>'+title+'</b> · '+n+(n===1?' pezzo':' pezzi')+' in '+list.length+(list.length===1?' riga':' righe')+'</div>'+list.map(row).join(''); }
+    html=sec('Arretrati (giorni precedenti)',late,'late')+sec('Di oggi',now,'now');
+  }
+  $('#rifBody').innerHTML=html;
 }
-function openRif(){ rifRender(); $('#rifFix').classList.toggle('hidden',role!=='titolare'); $('#rifHistWrap').classList.toggle('hidden',role!=='titolare'); $('#rifOv').classList.add('show'); }
+function openRif(){ rifRender(); rifExplLoad(true); $('#rifFix').classList.toggle('hidden',role!=='titolare'); $('#rifHistWrap').classList.toggle('hidden',role!=='titolare'); $('#rifOv').classList.add('show'); }
 /* Già rifornite: lo storico di cosa è stato venduto e quando è stato riportato in negozio (si legge dal registro, quindi solo il titolare) */
 var rifHistDays=3, rifHistOn=false, rifLed=null, rifLedAt=0;
 function rifWhen(t){
