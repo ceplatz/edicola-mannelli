@@ -121,6 +121,8 @@ main{width:100%;max-width:1000px;margin:0 auto;padding:18px 20px 40px}
 .tile .soon{position:absolute;top:10px;right:10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--gold);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
 .tile .tbadge{position:absolute;top:10px;right:10px;min-width:24px;height:24px;padding:0 7px;border-radius:999px;background:var(--coral);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .srrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--sand-3);margin:8px 0}
+.srrow.vmrow .rf-i{flex:1 1 100%}
+.vmrow .stepper{flex:0 0 auto}
 .srrow.bad{border-color:#e3b4b4;background:#fdf0f0}
 .srrow .rf-i{flex:1;min-width:0}
 .srrow .nm{font-weight:700;font-size:16px}
@@ -657,6 +659,20 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <div class="efx" id="edFx"></div>
   <div class="ferr" id="edErr"></div>
   <div class="acts"><button type="button" class="btn" id="edCancel">Annulla</button><button type="button" class="btn p" id="edSave">Salva la correzione</button></div>
+</div></div>
+
+<!-- Correggi una vendita (titolare) -->
+<div class="ov" id="vmOv" style="z-index:5700"><div class="sheet wide">
+  <h3>✏️ Modifica la vendita</h3>
+  <div id="vmInfo" style="font-size:14px;color:var(--espresso-2);margin-bottom:8px"></div>
+  <div id="vmLines"></div>
+  <label>Aggiungi un articolo</label>
+  <input id="vmQ" placeholder="Cerca per nome o codice…" autocomplete="off">
+  <div class="results" id="vmRes"></div>
+  <div id="vmFx" class="efx"></div>
+  <div id="vmTot" style="font-size:17px;margin:10px 0 2px"></div>
+  <div class="ferr" id="vmErr"></div>
+  <div class="acts"><button type="button" class="btn d" id="vmCancelSale">Annulla l'intera vendita</button><button type="button" class="btn" id="vmClose">Chiudi senza salvare</button><button type="button" class="btn p" id="vmSave">Salva le modifiche</button></div>
 </div></div>
 
 <!-- Collega un codice a barre a un articolo (titolare) -->
@@ -2649,6 +2665,7 @@ function arcCalendar(){
   }).catch(function(er){ console.warn('archivio:',er&&er.code); $('#arcView').innerHTML='<div class="none">Impossibile leggere l\'archivio. Controlla la connessione e le regole del database.</div>'; });
 }
 $('#arcView').addEventListener('click',function(e){
+  var ed=e.target.closest('[data-edit]'); if(ed && arc.diary){ var rs=arc.diary.sales.filter(function(x){ return x.id===ed.dataset.edit; })[0]; if(rs) openVm(rs,function(){ arcDiary(arc.day); }); return; }
   var id=e.target.id, c=e.target.closest('.cd[data-d]');
   if(c && !c.disabled){ arcDiary(c.dataset.d); return; }
   if(id==='arcPrev'){ arc.month=new Date(arc.month.getFullYear(),arc.month.getMonth()-1,1); arcCalendar(); }
@@ -2706,7 +2723,7 @@ function arcDiaryRender(D){
   var items=sumByItem(D.sales);
   h+='<h4>Articoli venduti</h4>'+tbl(['Articolo','Pezzi','Totale'],items.map(function(a){ return [esc(a.nome)+(a.codice?' <span style="color:var(--espresso-2)">'+esc(a.codice)+'</span>':''),fmtN(a.qta),eur.format(round2(a.tot))]; }),[1,2]);
   h+='<h4>Vendite, una per una</h4><div class="og-feed">'+(D.sales.length?D.sales.map(function(r){
-    return '<div class="vsale'+(r.annullata?' void':'')+'"><div class="tm">'+hhmm(saleWhen(r))+'</div><div class="it"><b>'+esc(r.staffNome||'')+'</b> · '+esc(r.postazione||'')+'<br>'+saleItems(r)+(r.annullata?'<span class="tg out">annullata'+(r.annullataDa?' da '+esc(r.annullataDa):'')+'</span>':'')+'</div><div class="tt">'+eur.format(r.totale||0)+'</div><span></span></div>';
+    return '<div class="vsale'+(r.annullata?' void':'')+'"><div class="tm">'+hhmm(saleWhen(r))+'</div><div class="it"><b>'+esc(r.staffNome||'')+'</b> · '+esc(r.postazione||'')+'<br>'+saleItems(r)+(r.annullata?'<span class="tg out">annullata'+(r.annullataDa?' da '+esc(r.annullataDa):'')+'</span>':'')+saleWas(r)+'</div><div class="tt">'+eur.format(r.totale||0)+'</div>'+(!r.annullata&&!D.seal?'<div class="noprint"><button type="button" class="btn" data-edit="'+esc(r.id)+'">Modifica</button></div>':'<span></span>')+'</div>';
   }).join(''):'<div class="none">Nessuna vendita.</div>')+'</div>';
   function movRows(list){ var lim=list.slice(0,300); return tbl(['Ora','Articolo','Operazione','Pezzi','Chi'],lim.map(function(r){ var t=movText(r); return [hhmmD(tsDate(r.quando)||tsDate(r.quandoLocale)),esc(r.prodottoNome||''),esc(t.txt),'<b class="'+t.cls+'">'+esc(t.q)+'</b>',esc(r.staffNome||'')]; }),[3])+(list.length>300?'<div class="none">Mostrate le prime 300 righe su '+list.length+': il file CSV le contiene tutte.</div>':''); }
   h+='<h4>Merce arrivata</h4>'+(kinds.carico.length||D.fatt.length?(kinds.carico.length?movRows(kinds.carico):'')+(D.fatt.length?'<div class="asof" style="margin-top:8px">Fatture del giorno: '+D.fatt.map(function(f){ return esc(f.distributoreNome||'Fattura')+(f.nota?' ('+esc(f.nota)+')':''); }).join(' · ')+'</div>':''):'<div class="none">Nessun carico né fattura.</div>');
@@ -2721,7 +2738,7 @@ function arcDownload(){
   var lines=[['giorno','sezione','ora','chi','computer','articolo','codice','pezzi','prezzo','totale','dettaglio'].join(';')];
   function row(sez,ora,chi,comp,art,cod,pz,pr,tot,det){ lines.push([D.day,sez,ora,chi,comp,art,cod,pz,dec(pr),dec(tot),det].map(cell).join(';')); }
   D.shifts.forEach(function(x){ row('turno',hhmmD(tsDate(x.apertoLocale)||tsDate(x.aperto)),x.staffNome,x.postazione,'','','','','','',x.chiusoIl?'chiuso alle '+hhmmD(tsDate(x.chiusoIl)):'aperto'); });
-  D.sales.forEach(function(r){ (r.righe||[]).forEach(function(l){ row('vendita',hhmmD(saleWhen(r)),r.staffNome,r.postazione,l.nome,l.codice||'',l.qta|0,l.prezzo,(l.qta|0)*(l.prezzo||0),r.annullata?'annullata':'valida'); }); });
+  D.sales.forEach(function(r){ (r.righe||[]).forEach(function(l){ row('vendita',hhmmD(saleWhen(r)),r.staffNome,r.postazione,l.nome,l.codice||'',l.qta|0,l.prezzo,(l.qta|0)*(l.prezzo||0),r.annullata?'annullata':(r.modificataIl?'valida (modificata)':'valida')); }); });
   D.moves.forEach(function(r){ var t=movText(r); row('movimento',hhmmD(tsDate(r.quando)||tsDate(r.quandoLocale)),r.staffNome,'',r.prodottoNome,r.codice||'',r.qta|0,'','',t.txt+(r.nota?' · '+r.nota:'')); });
   D.fatt.forEach(function(f){ row('fattura','',f.distributoreNome,'','','','','','',f.nota||''); });
   if(D.seal) row('chiusura giornata',hhmmD(tsDate(D.seal.chiusaIl)),D.seal.chiusaDa,'','','',D.seal.pezzi,'',D.seal.totale,(D.seal.vendite||0)+' vendite, '+(D.seal.annullate||0)+' annullate');
@@ -3146,7 +3163,8 @@ function round2(n){ return Math.round(n*100)/100; }
 function money(n){ return eur.format(n||0); }
 function hhmm(d){ return d ? d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '…'; }
 function saleWhen(r){ return tsDate(r.quando)||tsDate(r.quandoLocale); }
-function saleItems(r){ return (r.righe||[]).map(function(l){ return (l.qta|0)+'× '+esc(l.nome); }).join(' · '); }
+function saleItems(r){ return (r.righe||[]).map(function(l){ return (l.qta|0)+'× '+esc(l.nome); }).join(' · ')+(r.modificataIl?' <span class="tg">modificata</span>':''); }
+function saleWas(r){ var o=r.originale; return (r.modificataIl && o && o.righe) ? '<div class="hint" style="margin-top:2px">Prima della modifica: '+(o.righe||[]).map(function(l){ return (l.qta|0)+'× '+esc(l.nome); }).join(' · ')+' · '+money(o.totale)+'</div>' : ''; }
 function dayLabel(iso){ var d=new Date(iso+'T12:00:00'); return d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); }
 
 function openVend(){
@@ -3444,6 +3462,93 @@ function vendCancel(r,who){
     .catch(function(er){ toast(er&&er.code==='permission-denied'?'Non si può annullare: sono passati più di '+CANCEL_MIN+' minuti o la giornata è chiusa.':'Annullamento non riuscito. Riprova.'); });
 }
 
+/* ── Modifica una vendita (solo titolare): togliere o cambiare articoli, quantità e prezzi. Le quantità in negozio si aggiustano da sole; resta l'originale. ── */
+var vm={sale:null,lines:[],origJson:'',origNorm:'',done:null,busy:false};
+function vmRighe(lines){ return lines.map(function(l){ return {id:l.libero?'':l.id,nome:l.nome,codice:l.codice||'',qta:l.qta|0,prezzo:l.prezzo||0,libero:!!l.libero}; }); }
+function vmTotals(){ var pz=0,tot=0; vm.lines.forEach(function(l){ pz+=l.qta|0; tot+=(l.qta|0)*(l.prezzo||0); }); return {pz:pz,tot:round2(tot)}; }
+// quanti pezzi di ogni articolo sono in più (+) o in meno (−) rispetto alla vendita com'era
+function vmDelta(){
+  var d={}; (vm.sale.righe||[]).forEach(function(l){ if(l.id && !l.libero) d[l.id]=(d[l.id]||0)-(l.qta|0); });
+  vm.lines.forEach(function(l){ if(l.id && !l.libero) d[l.id]=(d[l.id]||0)+(l.qta|0); });
+  Object.keys(d).forEach(function(k){ if(!d[k]) delete d[k]; });
+  return d;
+}
+function openVm(sale,done){
+  if(role!=='titolare') return;
+  vm={sale:sale,lines:(sale.righe||[]).map(function(l){ return {id:l.id||'',nome:l.nome,codice:l.codice||'',qta:l.qta|0,prezzo:l.prezzo||0,libero:!!l.libero}; }),origJson:JSON.stringify(sale.righe||[]),origNorm:'',done:done||null,busy:false};
+  vm.origNorm=JSON.stringify(vmRighe(vm.lines));   // per capire se è cambiato qualcosa (origJson è com'è nel database, per il controllo al salvataggio)
+  var w=saleWhen(sale);
+  $('#vmInfo').innerHTML='<b>'+esc(sale.staffNome||'')+'</b> · '+esc(sale.postazione||'')+' · '+esc(sale.giorno?dayLabel(sale.giorno):'')+' alle '+hhmm(w)+(sale.modificataIl?' · già modificata una volta':'');
+  $('#vmQ').value=''; $('#vmRes').innerHTML=''; $('#vmErr').textContent=''; vmRender(); $('#vmOv').classList.add('show');
+}
+function vmRender(){
+  var T=vmTotals(), d=vmDelta();
+  $('#vmLines').innerHTML = vm.lines.length ? vm.lines.map(function(l,i){
+    return '<div class="srrow vmrow" data-i="'+i+'"><div class="rf-i"><div class="nm">'+esc(l.nome)+'</div><div class="rf-q">'+(l.libero?'articolo non in elenco':esc(l.codice||''))+'</div></div>'
+      +'<div class="stepper" style="margin:0"><button type="button" data-a="m" aria-label="Meno">−</button><input data-a="q" inputmode="numeric" value="'+l.qta+'" aria-label="Quantità"><button type="button" data-a="p" aria-label="Più">+</button></div>'
+      +'<input class="vmpr" data-a="pr" inputmode="decimal" value="'+fmtIn((l.prezzo||0).toFixed(2))+'" aria-label="Prezzo" style="width:84px"> <span class="hint">€</span>'
+      +'<button type="button" class="btn" data-a="x" aria-label="Togli">✕</button></div>'; }).join('')
+    : '<div class="none">Nessun articolo: per cancellare tutto usa «Annulla l\'intera vendita».</div>';
+  var fx=Object.keys(d).map(function(id){ var p=byId[id]; if(!p) return ''; var cur=p.qtaNegozio|0, nw=cur-d[id]; return esc(p.nome)+': negozio '+cur+' → <b>'+nw+'</b>'+(nw<0?' ⚠ sotto zero':''); }).filter(Boolean);
+  $('#vmFx').innerHTML = fx.length ? '<b>Cosa cambia in negozio:</b><br>'+fx.join('<br>') : 'Le quantità in negozio non cambiano.';
+  var before=round2((vm.sale.righe||[]).reduce(function(a,l){ return a+(l.qta|0)*(l.prezzo||0); },0));
+  $('#vmTot').innerHTML='Totale: <b>'+money(T.tot)+'</b> · '+T.pz+(T.pz===1?' pezzo':' pezzi')+(T.tot!==before?' <span class="hint">(prima '+money(before)+')</span>':'');
+  $('#vmSave').disabled = vm.busy || !vm.lines.length || T.pz<1 || vm.lines.some(function(l){ return !(l.qta>=1); }) || JSON.stringify(vmRighe(vm.lines))===vm.origNorm;
+}
+$('#vmLines').addEventListener('click',function(e){
+  var b=e.target.closest('[data-a]'); if(!b||b.tagName==='INPUT') return; var i=+b.closest('.srrow').dataset.i, l=vm.lines[i]; if(!l) return;
+  if(b.dataset.a==='x') vm.lines.splice(i,1); else if(b.dataset.a==='m'){ if(l.qta>1) l.qta--; else vm.lines.splice(i,1); } else if(b.dataset.a==='p') l.qta=Math.min(999,l.qta+1);
+  vmRender();
+});
+$('#vmLines').addEventListener('change',function(e){
+  var inp=e.target; if(inp.tagName!=='INPUT') return; var i=+inp.closest('.srrow').dataset.i, l=vm.lines[i]; if(!l) return;
+  if(inp.dataset.a==='q'){ var n=parseInt(inp.value,10); if(!isFinite(n)||n<1) vm.lines.splice(i,1); else l.qta=Math.min(999,n); }
+  else if(inp.dataset.a==='pr'){ var v=num(inp.value); l.prezzo=v==null?0:v; }
+  vmRender();
+});
+$('#vmQ').addEventListener('input',function(){
+  var q=norm(this.value); if(!q){ $('#vmRes').innerHTML=''; return; }
+  var list=products.filter(function(p){ return matches(p,q); }).sort(function(a,b){ return rank(a,q)-rank(b,q) || String(a.nome).localeCompare(String(b.nome),'it'); }).slice(0,6);
+  $('#vmRes').innerHTML = list.length ? list.map(function(p){ return '<button type="button" class="res" data-id="'+esc(p.id)+'"><div class="info"><div class="nm">'+esc(p.nome)+'</div></div><div class="pr">'+eur.format(p.prezzoVendita||0)+'</div></button>'; }).join('') : '<div class="empty" style="padding:12px">Nessun risultato.</div>';
+});
+$('#vmRes').addEventListener('click',function(e){
+  var b=e.target.closest('.res'); if(!b || !byId[b.dataset.id]) return; var p=byId[b.dataset.id];
+  var l=vm.lines.filter(function(x){ return !x.libero && x.id===p.id; })[0];
+  if(l) l.qta=Math.min(999,l.qta+1); else vm.lines.push({id:p.id,nome:p.nome,codice:p.codiceCustom||p.codiceProdotto||p.codiceRivenditore||'',qta:1,prezzo:p.prezzoVendita||0,libero:false});
+  $('#vmQ').value=''; $('#vmRes').innerHTML=''; vmRender();
+});
+$('#vmClose').onclick=function(){ $('#vmOv').classList.remove('show'); };
+$('#vmCancelSale').onclick=function(){ var s0=vm.sale; $('#vmOv').classList.remove('show'); vendCancel(s0,'Titolare'); if(vm.done) setTimeout(vm.done,900); };
+$('#vmSave').onclick=function(){
+  if(vm.busy) return; if(!isOnline()){ $('#vmErr').textContent='Senza rete non si può modificare una vendita. Riprova quando torna il segnale.'; return; }
+  var sale=vm.sale, righe=vmRighe(vm.lines), T=vmTotals(), d=vmDelta(), F=firebase.firestore.FieldValue, sref=fdb.doc('vendite/'+sale.id), ids=Object.keys(d), origJson=vm.origJson;
+  vm.busy=true; vmRender(); $('#vmErr').textContent='';
+  fdb.runTransaction(function(tx){
+    return Promise.all([tx.get(sref)].concat(ids.map(function(id){ return tx.get(fdb.doc('prodotti/'+id)); }))).then(function(snaps){
+      var sn=snaps[0]; if(!sn.exists) throw {code:'gone'};
+      var cur=sn.data(); if(cur.annullata) throw {code:'annullata'};
+      if(JSON.stringify(cur.righe||[])!==origJson) throw {code:'changed'};
+      var rec={righe:righe,pezzi:T.pz,totale:T.tot,modificataIl:F.serverTimestamp(),modificataDa:'Titolare'};
+      if(!cur.originale) rec.originale={righe:cur.righe||[],pezzi:cur.pezzi|0,totale:cur.totale||0};
+      tx.update(sref,rec);
+      ids.forEach(function(id,i){ if(snaps[i+1].exists) tx.update(fdb.doc('prodotti/'+id),{qtaNegozio:F.increment(-d[id]),aggiornatoIl:F.serverTimestamp()}); });   // più venduti → meno in negozio, e viceversa
+    });
+  }).then(function(){
+    vm.busy=false; $('#vmOv').classList.remove('show');
+    ids.forEach(function(id){ if(!isRiforn(byId[id])) return; if(d[id]>0) rifAdd([{id:id,qta:d[id],libero:false}]); else rifDec(id,-d[id]); });   // la lista da rifornire segue la vendita corretta
+    toast('Vendita modificata: '+T.pz+(T.pz===1?' pezzo':' pezzi')+' · '+money(T.tot)+'.');
+    if(vm.done) setTimeout(vm.done,500);
+  }).catch(function(er){
+    vm.busy=false; vmRender(); console.warn('modifica vendita:',er&&er.code);
+    var c=er&&er.code;
+    $('#vmErr').textContent = c==='changed' ? 'Questa vendita è stata cambiata nel frattempo (da un altro schermo). Chiudi e riaprila.'
+      : c==='annullata' ? 'Questa vendita è stata annullata: non si può più modificare.'
+      : c==='gone' ? 'Questa vendita non esiste più.'
+      : c==='permission-denied' ? 'Il database non permette la modifica: se la giornata è chiusa, riaprila da Oggi; altrimenti pubblica le regole aggiornate (firestore.rules).'
+      : 'Modifica non riuscita. Controlla la connessione e riprova.';
+  });
+};
+
 /* chiudere il turno */
 function sumByItem(list){
   var agg={}; list.filter(function(r){ return !r.annullata; }).forEach(function(r){ (r.righe||[]).forEach(function(l){ var k=(l.id||'')+'|'+l.nome; var a=agg[k]||(agg[k]={nome:l.nome,codice:l.codice||'',qta:0,tot:0}); a.qta+=l.qta|0; a.tot+=(l.qta|0)*(l.prezzo||0); }); });
@@ -3522,8 +3627,8 @@ function ogPeopleHtml(){
       +'<span class="ps">'+(cp?'carrello '+cp+(cp===1?' pezzo':' pezzi')+' · ':'')+ok.length+(ok.length===1?' vendita':' vendite')+' · '+fmtN(pz)+' pezzi · <b>'+money(round2(tot))+'</b></span></summary>'
       +(carts.length?'<div class="hint" style="margin:8px 0 2px">Carrello in corso (non ancora registrato)</div>'+carts.map(function(c){ return '<div class="vsale"><div class="tm">…</div><div class="it">'+saleItems(c)+'</div><div class="tt">'+money(c.totale)+'</div><span></span></div>'; }).join(''):'')
       +'<div class="og-feed" style="margin-top:6px">'+(sales.length?sales.map(function(r){
-        return '<div class="vsale'+(r.annullata?' void':'')+'"><div class="tm">'+hhmm(saleWhen(r))+'</div><div class="it">'+esc(r.postazione||'')+'<br>'+saleItems(r)+(r.annullata?'<span class="tg out">annullata'+(r.annullataDa?' da '+esc(r.annullataDa):'')+'</span>':'')+'</div><div class="tt">'+money(r.totale)+'</div>'
-          +(!r.annullata&&!seal?'<button type="button" class="btn noprint" data-cancel="'+esc(r.id)+'">Annulla</button>':'<span></span>')+'</div>'; }).join(''):'<div class="none">Nessuna vendita registrata oggi.</div>')+'</div></details>';
+        return '<div class="vsale'+(r.annullata?' void':'')+'"><div class="tm">'+hhmm(saleWhen(r))+'</div><div class="it">'+esc(r.postazione||'')+'<br>'+saleItems(r)+(r.annullata?'<span class="tg out">annullata'+(r.annullataDa?' da '+esc(r.annullataDa):'')+'</span>':'')+saleWas(r)+'</div><div class="tt">'+money(r.totale)+'</div>'
+          +(!r.annullata&&!seal?'<div class="noprint" style="display:flex;gap:6px"><button type="button" class="btn" data-edit="'+esc(r.id)+'">Modifica</button><button type="button" class="btn" data-cancel="'+esc(r.id)+'">Annulla</button></div>':'<span></span>')+'</div>'; }).join(''):'<div class="none">Nessuna vendita registrata oggi.</div>')+'</div></details>';
   }).join('')+'</div>';
 }
 function ogRender(){
@@ -3546,15 +3651,15 @@ function ogRender(){
     +'<h4>Pezzi per ora</h4><div class="og-hours">'+bars+'</div><div style="height:16px"></div>'
     +'<h4>Più venduti oggi</h4>'+(items.length?tbl(['Articolo','Pezzi','Totale'],items.map(function(a){ return [esc(a.nome),fmtN(a.qta),money(round2(a.tot))]; }),[1,2]):'<div class="none">—</div>')
     +'<h4>Vendite, una per una</h4><div class="og-feed og-all">'+(feed.length?feed.map(function(r){
-      return '<div class="vsale'+(r.annullata?' void':'')+'"><div class="tm">'+hhmm(saleWhen(r))+'</div><div class="it"><b>'+esc(r.staffNome||'')+'</b> · '+esc(r.postazione||'')+'<br>'+saleItems(r)+(r.annullata?'<span class="tg out">annullata'+(r.annullataDa?' da '+esc(r.annullataDa):'')+'</span>':'')+'</div><div class="tt">'+money(r.totale)+'</div>'
-        +(!r.annullata&&!seal?'<button type="button" class="btn noprint" data-cancel="'+esc(r.id)+'">Annulla</button>':'<span></span>')+'</div>';
+      return '<div class="vsale'+(r.annullata?' void':'')+'"><div class="tm">'+hhmm(saleWhen(r))+'</div><div class="it"><b>'+esc(r.staffNome||'')+'</b> · '+esc(r.postazione||'')+'<br>'+saleItems(r)+(r.annullata?'<span class="tg out">annullata'+(r.annullataDa?' da '+esc(r.annullataDa):'')+'</span>':'')+saleWas(r)+'</div><div class="tt">'+money(r.totale)+'</div>'
+        +(!r.annullata&&!seal?'<div class="noprint" style="display:flex;gap:6px"><button type="button" class="btn" data-edit="'+esc(r.id)+'">Modifica</button><button type="button" class="btn" data-cancel="'+esc(r.id)+'">Annulla</button></div>':'<span></span>')+'</div>';
     }).join(''):'<div class="none">Ancora nessuna vendita.</div>')+'</div>';
 }
 $('#ogBody').addEventListener('toggle',function(e){ var d=e.target; if(d && d.classList && d.classList.contains('og-p')) og.openP[d.dataset.p]=d.open; },true);
 $('#ogSeal').addEventListener('click',function(e){
   if(e.target.id==='ogSealBtn') ogSealDay(); else if(e.target.id==='ogReopen') ogReopen(); else if(e.target.id==='ogRif'){ rifBuildUi(e.target); openRif(); }
 });
-$('#ogBody').addEventListener('click',function(e){ var b=e.target.closest('[data-cancel]'); if(!b) return; var r=og.sales.filter(function(x){ return x.id===b.dataset.cancel; })[0]; if(r) vendCancel(r,'Titolare'); });
+$('#ogBody').addEventListener('click',function(e){ var eb=e.target.closest('[data-edit]'); if(eb){ var rs=og.sales.filter(function(x){ return x.id===eb.dataset.edit; })[0]; if(rs) openVm(rs); return; } var b=e.target.closest('[data-cancel]'); if(!b) return; var r=og.sales.filter(function(x){ return x.id===b.dataset.cancel; })[0]; if(r) vendCancel(r,'Titolare'); });
 function ogSealDay(){
   var sealDay=og.day, A=ogAgg(), openSh=og.shifts.filter(function(s){ return !s.chiusoIl; });
   if(!confirm('Chiudere la giornata del '+dayLabel(og.day)+'?\n\n'+A.ok.length+' vendite · '+A.pz+' pezzi · '+money(A.tot)+'\n\nDopo la chiusura nessuno potrà registrare né annullare vendite di questo giorno'+(openSh.length?' e i '+openSh.length+' turni ancora aperti verranno chiusi':'')+'. Puoi sempre riaprirla.\n\nPrima controlla che tutti i computer siano verdi (sincronizzati): le vendite ancora in attesa verrebbero rifiutate.')) return;
