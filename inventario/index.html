@@ -599,7 +599,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
       <label style="margin-top:6px">Prezzo di acquisto €</label>
       <input name="prezzoAcquisto" inputmode="decimal" placeholder="0,00">
     </div>
-    <div id="creatoRow" class="hidden"><label>Data di inserimento nel sistema</label><input type="date" name="dataInserimento"><div class="hint" style="margin:2px 2px 0">Si può correggere se l'articolo è stato inserito dopo (o prima) del giorno registrato.</div></div>
+    <div id="creatoRow" class="hidden"><label id="creatoLbl">Data di inserimento nel sistema</label><input type="date" name="dataInserimento"><div class="hint" style="margin:2px 2px 0">Si può correggere se l'articolo è stato inserito dopo (o prima) del giorno registrato.</div></div>
     <div class="ferr" id="ferr"></div>
     <div class="acts">
       <button type="button" class="btn d hidden" id="delBtn">Elimina</button>
@@ -704,6 +704,9 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <div id="carInfo" style="font-size:15px;line-height:1.45"></div>
   <label>Quanti pezzi sono arrivati?</label>
   <div class="stepper"><button type="button" id="carMinus" aria-label="Meno">−</button><input id="carQty" inputmode="numeric" value="1"><button type="button" id="carPlus" aria-label="Più">+</button></div>
+  <label>Quando sono arrivati?</label>
+  <div class="with-scan"><input type="date" id="carDate"><button type="button" class="btn mini" id="carToday">Oggi</button></div>
+  <div class="hint" id="carDateHint" style="margin:2px 2px 0">Se sono arrivati prima e li registri adesso, scegli il giorno in cui sono entrati in negozio.</div>
   <label>Dove li metti?</label>
   <div class="seg" id="carDest"><button type="button" data-d="magazzino" class="on">Magazzino</button><button type="button" data-d="negozio">Negozio</button></div>
   <label>Chi li registra?</label>
@@ -1378,7 +1381,9 @@ function openForm(id){
   pf.qtaNegozio.value = p? (p.qtaNegozio|0) : 0;
   pf.qtaMagazzino.value = p? (p.qtaMagazzino|0) : 0;
   formBase={negozio:p?(p.qtaNegozio|0):0, magazzino:p?(p.qtaMagazzino|0):0, creato:''};
-  var cd=p?tsDate(p.creatoIl):null; formBase.creato=cd?isoDay(cd):''; pf.dataInserimento.value=formBase.creato; $('#creatoRow').classList.toggle('hidden',!id);   // i numeri come erano all'apertura della scheda
+  var cd=p?tsDate(p.creatoIl):null; formBase.creato=cd?isoDay(cd):''; pf.dataInserimento.value=id?formBase.creato:isoDay(new Date()); $('#creatoRow').classList.remove('hidden');
+  $('#creatoLbl').textContent = id ? 'Data di inserimento nel sistema' : 'Data di arrivo (quando i pezzi sono entrati in negozio)';
+  { var lo2=new Date(); lo2.setDate(lo2.getDate()-365); pf.dataInserimento.max=isoDay(new Date()); pf.dataInserimento.min=id?'':isoDay(lo2); }   // i numeri come erano all'apertura della scheda
   pf.prezzoAcquisto.value='';
   $('#qtyHint').textContent = id ? 'Per aggiungere pezzi appena acquistati usa «＋ Carico» nella scheda dell\'articolo: resta registrato quando e quanti. Cambiando qui un numero, viene registrata una «correzione».'
                                  : 'Le quantità inserite qui vengono registrate come primo carico, con data e ora.';
@@ -1415,7 +1420,10 @@ pf.addEventListener('submit',function(e){
   if(dup){ err.textContent='Questo '+(dup.k==='barcode'?'codice a barre':'codice prodotto')+' è già usato da «'+dup.o.nome+'».'; return; }
   var sv=$('#formSave'); sv.disabled=true;
   var ref = editingId ? fdb.doc('prodotti/'+editingId) : fdb.collection('prodotti').doc();
-  if(!editingId) rec.creatoIl=firebase.firestore.Timestamp.fromDate(new Date());
+  var arrDay=f.dataInserimento.value||isoDay(new Date());
+  if(!editingId && !dayOk(arrDay)){ err.textContent='La data di arrivo non è valida: scegli un giorno fino a oggi (non oltre un anno fa).'; sv.disabled=false; return; }
+  var arrWhen=whenFromDay(arrDay);
+  if(!editingId) rec.creatoIl=firebase.firestore.Timestamp.fromDate(arrWhen);
   else if(f.dataInserimento.value && f.dataInserimento.value!==formBase.creato) rec.creatoIl=firebase.firestore.Timestamp.fromDate(new Date(f.dataInserimento.value+'T12:00:00'));   // data di inserimento corretta a mano
   var b=fdb.batch(), F=firebase.firestore.FieldValue, newQ={negozio:rec.qtaNegozio, magazzino:rec.qtaMagazzino}, logP={id:ref.id,nome:nome,codiceProdotto:rec.codiceProdotto};
   if(editingId){
@@ -1429,7 +1437,7 @@ pf.addEventListener('submit',function(e){
     });
   } else {
     ['magazzino','negozio'].forEach(function(loc){
-      if(newQ[loc]>0) b.set(fdb.collection('movimenti').doc(),movDoc(logP,{tipo:'carico',da:'esterno',a:loc,qta:newQ[loc],nota:'Carico iniziale (nuovo articolo)'},null));
+      if(newQ[loc]>0){ var mo={tipo:'carico',da:'esterno',a:loc,qta:newQ[loc],nota:'Carico iniziale (nuovo articolo)'}; if(arrDay!==isoDay(new Date())) mo.quandoLocale=firebase.firestore.Timestamp.fromDate(arrWhen); b.set(fdb.collection('movimenti').doc(),movDoc(logP,mo,null)); }
     });
   }
   if(photo.full) rec.miniatura=photo.thumb; else if(photo.remove) rec.miniatura='';
@@ -2242,16 +2250,21 @@ function loadProdHistory(id){
 
 /* ── Carico: pezzi acquistati ── */
 var car=null;
+// Data scelta (aaaa-mm-gg) → momento da registrare: oggi = adesso; un altro giorno = mezzogiorno di quel giorno
+function whenFromDay(iso){ return (!iso || iso===isoDay(new Date())) ? new Date() : new Date(iso+'T12:00:00'); }
+function dayOk(iso){ if(!/^\d{4}-\d{2}-\d{2}$/.test(iso||'')) return false; var t=isoDay(new Date()), lo=new Date(); lo.setDate(lo.getDate()-365); return iso<=t && iso>=isoDay(lo); }
 function openCarico(p){
   car={prod:p,qty:1,dest:'magazzino',who:null};
   var w=whoChoices(); car.who=w[0]||null;
   $('#carInfo').innerHTML='<b>'+esc(p.nome)+'</b><br><span style="color:var(--espresso-2)">Ora: '+(p.qtaMagazzino|0)+' in magazzino · '+(p.qtaNegozio|0)+' in negozio</span>';
   $('#carQty').value='1'; $('#carNota').value=''; $('#carErr').textContent='';
+  var cd=$('#carDate'), lo=new Date(); lo.setDate(lo.getDate()-365); cd.max=isoDay(new Date()); cd.min=isoDay(lo); cd.value=isoDay(new Date());
   Array.prototype.forEach.call(document.querySelectorAll('#carDest button'),function(b){ b.classList.toggle('on',b.dataset.d==='magazzino'); });
   $('#carWho').innerHTML=w.map(function(s){ return '<button type="button" class="chip'+(car.who&&car.who.id===s.id?' sel':'')+'" data-id="'+esc(s.id)+'">'+esc(s.nome)+'</button>'; }).join('');
   updCar(); $('#carOv').classList.add('show');
 }
 function updCar(){ var n=car.qty|0; $('#carGo').disabled=!(n>=1&&n<=100000&&car.who); $('#carGo').textContent='Aggiungi '+(n>=1?n+(n===1?' pezzo':' pezzi'):'')+' in '+LUOGO[car.dest].toLowerCase(); }
+$('#carToday').onclick=function(){ $('#carDate').value=isoDay(new Date()); };
 $('#carMinus').onclick=function(){ if(car.qty>1){ car.qty--; $('#carQty').value=car.qty; updCar(); } };
 $('#carPlus').onclick=function(){ if(car.qty<100000){ car.qty++; $('#carQty').value=car.qty; updCar(); } };
 $('#carQty').addEventListener('input',function(){ var n=parseInt(this.value,10); car.qty=isFinite(n)?Math.max(0,Math.min(n,100000)):0; updCar(); });
@@ -2263,12 +2276,16 @@ $('#carOv').addEventListener('click',function(e){ if(e.target===this && !$('#car
 $('#carGo').onclick=function(){
   if(!car||!car.who) return;
   var p=car.prod, n=car.qty|0, dest=car.dest, F=firebase.firestore.FieldValue, b=fdb.batch(), go=$('#carGo');
+  var day=$('#carDate').value||isoDay(new Date());
+  if(!dayOk(day)){ $('#carErr').textContent='La data non è valida: scegli un giorno fino a oggi (non oltre un anno fa).'; return; }
+  var when=whenFromDay(day), back=day!==isoDay(new Date());
   var upd={aggiornatoIl:F.serverTimestamp()}; upd[NOMEQ[dest]]=F.increment(n);
   b.update(fdb.doc('prodotti/'+p.id),upd);
-  b.set(fdb.collection('movimenti').doc(),movDoc(p,{tipo:'carico',da:'esterno',a:dest,qta:n,nota:$('#carNota').value.trim().slice(0,120)},car.who));
+  var mo={tipo:'carico',da:'esterno',a:dest,qta:n,nota:$('#carNota').value.trim().slice(0,120)}; if(back) mo.quandoLocale=firebase.firestore.Timestamp.fromDate(when);   // la data vera di arrivo: nel registro e nella storia l'articolo compare in quel giorno
+  b.set(fdb.collection('movimenti').doc(),movDoc(p,mo,car.who));
   go.disabled=true; go.dataset.busy='1'; $('#carErr').textContent='';
   commitFast(b).then(function(r){
-    delete go.dataset.busy; $('#carOv').classList.remove('show'); car=null; toast(r.queued?QUEUED_MSG:'Aggiunti '+n+(n===1?' pezzo':' pezzi')+' in '+LUOGO[dest].toLowerCase()+' — registrato nella storia dell\'articolo.');
+    delete go.dataset.busy; $('#carOv').classList.remove('show'); car=null; toast(r.queued?QUEUED_MSG:'Aggiunti '+n+(n===1?' pezzo':' pezzi')+' in '+LUOGO[dest].toLowerCase()+(back?', arrivati il '+itDate(day):'')+' — registrato nella storia dell\'articolo.');
     if(viewingId===p.id){ openView(p.id); }
   }).catch(function(er){ delete go.dataset.busy; go.disabled=false; console.warn('carico:',er&&er.code);
     $('#carErr').textContent = er&&er.code==='permission-denied' ? 'Il database non permette ancora i carichi: pubblica le regole aggiornate (firestore.rules) e riprova.' : 'Non salvato: manca la connessione. Riprova.'; });
@@ -2677,13 +2694,21 @@ $('#arcView').addEventListener('click',function(e){
   else if(id==='arcCsv'){ arcDownload(); }
 });
 function hhmmD(d){ return d?hhmm(d):'—'; }
+// Le righe del registro appartengono al giorno in cui sono davvero accadute (quandoLocale, se c'è): un carico inserito martedì ma arrivato lunedì sta nel diario di lunedì
+function movUnion(snaps,from,to){
+  var seen={}, out=[];
+  snaps.forEach(function(sn){ sn.docs.forEach(function(d){ if(seen[d.id]) return; seen[d.id]=1; var o=d.data(); o.id=d.id;
+    var t=tsDate(o.quandoLocale||o.quando); if(t && t>=from && t<to) out.push(o); }); });
+  return out;
+}
 function arcDiary(day){
   arc.day=day; arc.month=new Date(day+'T12:00:00'); arc.month=new Date(arc.month.getFullYear(),arc.month.getMonth(),1);
   $('#arcView').innerHTML='<div class="none">Caricamento del giorno…</div>';
   var from=new Date(day+'T00:00:00'), to=new Date(from.getTime()), T=firebase.firestore.Timestamp; to.setDate(to.getDate()+1);
   Promise.all([
     fdb.collection('vendite').where('giorno','==',day).get(),
-    fdb.collection('movimenti').where('quando','>=',T.fromDate(from)).where('quando','<',T.fromDate(to)).get(),
+    Promise.all([fdb.collection('movimenti').where('quando','>=',T.fromDate(from)).where('quando','<',T.fromDate(to)).get(),
+                 fdb.collection('movimenti').where('quandoLocale','>=',T.fromDate(from)).where('quandoLocale','<',T.fromDate(to)).get()]),
     fdb.collection('turni').where('giorno','==',day).get(),
     fdb.doc('giornate/'+day).get(),
     fdb.collection('fatture').where('data','==',day).get(),
@@ -2692,7 +2717,7 @@ function arcDiary(day){
     if(arc.day!==day) return;
     var D={day:day,
       sales:r[0].docs.map(function(d){ var o=d.data(); o.id=d.id; return o; }).sort(function(a,b){ return (saleWhen(a)||0)-(saleWhen(b)||0); }),
-      moves:r[1].docs.map(function(d){ var o=d.data(); o.id=d.id; return o; }).sort(function(a,b){ return ((tsDate(a.quando)||tsDate(a.quandoLocale)||0)-(tsDate(b.quando)||tsDate(b.quandoLocale)||0)); }),
+      moves:movUnion(r[1],from,to).sort(function(a,b){ return ((tsDate(a.quando)||tsDate(a.quandoLocale)||0)-(tsDate(b.quando)||tsDate(b.quandoLocale)||0)); }),
       shifts:r[2].docs.map(function(d){ var o=d.data(); o.id=d.id; return o; }).sort(function(a,b){ return (tsDate(a.apertoLocale)||tsDate(a.aperto)||0)-(tsDate(b.apertoLocale)||tsDate(b.aperto)||0); }),
       seal:r[3].exists?r[3].data():null,
       fatt:r[4].docs.map(function(d){ var o=d.data(); o.id=d.id; return o; }), costs:r[5]};
