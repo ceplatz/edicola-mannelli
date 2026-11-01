@@ -163,13 +163,26 @@ service cloud.firestore {
         && request.resource.data.ruolo == (titolare() ? 'titolare' : 'personale')
         && (titolare()
             || exists(/databases/$(database)/documents/personale/$(request.resource.data.staffId)));
-      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+      allow update: if (request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['annullata', 'annullataIl', 'annullataDa'])
         && request.resource.data.annullata == true && resource.data.annullata == false
         && request.resource.data.annullataIl == request.time
         && !giornoChiuso(resource.data.giorno)
         && (titolare()
-            || (personale() && request.time < resource.data.quando + duration.value(11, 'm')));
+            || (personale() && request.time < resource.data.quando + duration.value(11, 'm'))))
+        // Solo il titolare può CORREGGERE uno scontrino (togliere o cambiare articoli, quantità, prezzi): resta traccia di com'era (originale) e di quando.
+        || (titolare()
+            && resource.data.annullata == false
+            && !giornoChiuso(resource.data.giorno)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['righe', 'pezzi', 'totale', 'modificataIl', 'modificataDa', 'originale'])
+            && request.resource.data.modificataIl == request.time
+            && request.resource.data.modificataDa is string && request.resource.data.modificataDa.size() <= 40
+            && request.resource.data.righe is list
+            && request.resource.data.righe.size() >= 1 && request.resource.data.righe.size() <= 60
+            && request.resource.data.pezzi is int && request.resource.data.pezzi >= 1 && request.resource.data.pezzi <= 2000
+            && request.resource.data.totale is number && request.resource.data.totale >= 0
+            && (!('originale' in resource.data) || request.resource.data.originale == resource.data.originale));
       allow delete: if false;
     }
 
