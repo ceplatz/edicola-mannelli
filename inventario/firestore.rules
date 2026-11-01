@@ -229,7 +229,7 @@ service cloud.firestore {
         // ora reale dell'azione sul dispositivo (può essere precedente se la rete mancava): ragionevolmente vicina a quella del server
         && nuovo().get('quandoLocale', request.time) is timestamp
         && nuovo().get('quandoLocale', request.time) <= request.time + duration.value(10, 'm')
-        && nuovo().get('quandoLocale', request.time) >= request.time - duration.value(45, 'd')
+        && nuovo().get('quandoLocale', request.time) >= request.time - duration.value(tipoRiga() == 'carico' ? 366 : 45, 'd')   // un carico (solo titolare) può avere la data vera di arrivo fino a un anno fa
         && nuovo().ruolo == (titolare() ? 'titolare' : 'personale')
         && (sposta() || carico() || rettifica());
       // Solo il titolare può CORREGGERE una riga (data/ora, pezzi, nota). Si tiene traccia di com'era (qtaPrima, deltaPrima, quandoPrima).
