@@ -3490,6 +3490,8 @@ function vendCancel(r,who){
 /* ── Modifica una vendita (solo titolare): togliere o cambiare articoli, quantità e prezzi. Le quantità in negozio si aggiustano da sole; resta l'originale. ── */
 var vm={sale:null,lines:[],origJson:'',origNorm:'',done:null,busy:false};
 function vmRighe(lines){ return lines.map(function(l){ return {id:l.libero?'':l.id,nome:l.nome,codice:l.codice||'',qta:l.qta|0,prezzo:l.prezzo||0,libero:!!l.libero}; }); }
+// righe come stanno nel database, in forma confrontabile (stessi campi, stesso ordine, stessi tipi)
+function vmNormDb(righe){ return JSON.stringify(vmRighe((righe||[]).map(function(l){ return {id:l.id||'',nome:l.nome,codice:l.codice||'',qta:l.qta|0,prezzo:l.prezzo||0,libero:!!l.libero}; }))); }
 function vmTotals(){ var pz=0,tot=0; vm.lines.forEach(function(l){ pz+=l.qta|0; tot+=(l.qta|0)*(l.prezzo||0); }); return {pz:pz,tot:round2(tot)}; }
 // quanti pezzi di ogni articolo sono in più (+) o in meno (−) rispetto alla vendita com'era
 function vmDelta(){
@@ -3546,13 +3548,13 @@ $('#vmClose').onclick=function(){ $('#vmOv').classList.remove('show'); };
 $('#vmCancelSale').onclick=function(){ var s0=vm.sale; $('#vmOv').classList.remove('show'); vendCancel(s0,'Titolare'); if(vm.done) setTimeout(vm.done,900); };
 $('#vmSave').onclick=function(){
   if(vm.busy) return; if(!isOnline()){ $('#vmErr').textContent='Senza rete non si può modificare una vendita. Riprova quando torna il segnale.'; return; }
-  var sale=vm.sale, righe=vmRighe(vm.lines), T=vmTotals(), d=vmDelta(), F=firebase.firestore.FieldValue, sref=fdb.doc('vendite/'+sale.id), ids=Object.keys(d), origJson=vm.origJson;
+  var sale=vm.sale, righe=vmRighe(vm.lines), T=vmTotals(), d=vmDelta(), F=firebase.firestore.FieldValue, sref=fdb.doc('vendite/'+sale.id), ids=Object.keys(d), vm0norm=vm.origNorm;
   vm.busy=true; vmRender(); $('#vmErr').textContent='';
   fdb.runTransaction(function(tx){
     return Promise.all([tx.get(sref)].concat(ids.map(function(id){ return tx.get(fdb.doc('prodotti/'+id)); }))).then(function(snaps){
       var sn=snaps[0]; if(!sn.exists) throw {code:'gone'};
       var cur=sn.data(); if(cur.annullata) throw {code:'annullata'};
-      if(JSON.stringify(cur.righe||[])!==origJson) throw {code:'changed'};
+      if(vmNormDb(cur.righe)!==vm0norm) throw {code:'changed'};   // si confrontano i VALORI delle righe, non il testo (l'ordine dei campi può cambiare tra cache e server)
       var rec={righe:righe,pezzi:T.pz,totale:T.tot,modificataIl:F.serverTimestamp(),modificataDa:'Titolare'};
       if(!cur.originale) rec.originale={righe:cur.righe||[],pezzi:cur.pezzi|0,totale:cur.totale||0};
       tx.update(sref,rec);
