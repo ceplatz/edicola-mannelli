@@ -627,6 +627,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
     <div class="stepper"><button type="button" id="mvMinus" aria-label="Meno">−</button><input id="mvQty" inputmode="numeric" value="1"><button type="button" id="mvPlus" aria-label="Più">+</button><span class="mx" id="mvMax"></span></div>
     <div id="mvRif" class="hidden"><div class="mvrif"><div class="hint" style="margin:0 0 6px">📦 Da rifornire: <b id="mvRifN"></b> venduti di questo articolo. Questo spostamento è…</div>
       <div class="seg" id="mvRifSeg"><button type="button" data-s="r" class="on">Rifornisco la vendita</button><button type="button" data-s="x">È un pezzo in più</button></div></div></div>
+    <div id="mvDateRow" class="hidden"><label>Quando è stato spostato?</label><div class="with-scan"><input type="date" id="mvDate"><button type="button" class="btn mini" id="mvToday">Oggi</button></div><div class="hint">Solo titolare: se lo spostamento è avvenuto in un altro giorno, scegli quel giorno (fino a 45 giorni fa).</div></div>
     <div id="mvWhoWrap"><label>Chi sposta?</label><div class="chips" id="mvWho"></div></div>
     <div class="ferr" id="mvErr"></div>
   </div>
@@ -826,6 +827,7 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
   <div class="with-scan"><input id="srQ" placeholder="Scansiona un articolo…" autocomplete="off" inputmode="search" enterkeyhint="done"><button type="button" class="icon-btn" id="srScan" aria-label="Scansiona con la fotocamera">📷</button></div>
   <div class="results" id="srRes"></div>
   <div id="srList"></div>
+  <div id="srDateRow" class="hidden"><label>Quando sono stati spostati?</label><div class="with-scan"><input type="date" id="srDate"><button type="button" class="btn mini" id="srToday">Oggi</button></div><div class="hint">Solo titolare: vale per tutto l'elenco (fino a 45 giorni fa).</div></div>
   <div id="srWhoWrap"><label>Chi sposta?</label><div class="chips" id="srWho"></div></div>
   <div class="ferr" id="srErr"></div>
   <div class="acts"><button type="button" class="btn" id="srClear">Svuota l'elenco</button><button type="button" class="btn" id="srClose">Chiudi</button><button type="button" class="btn p" id="srGo" disabled>Sposta</button></div>
@@ -1907,7 +1909,7 @@ function rifBuild(){
     var ev={}; function add(id,t,q,sale){ (ev[id]=ev[id]||[]).push({t:t,q:q,sale:sale}); }
     r[0].docs.forEach(function(d){ var o=d.data(); if(o.annullata) return; var t=(tsDate(o.quando)||tsDate(o.quandoLocale)||new Date(0)).getTime();
       (o.righe||[]).forEach(function(l){ if(l.id && !l.libero && byId[l.id] && isRiforn(byId[l.id])) add(l.id,t,l.qta|0,true); }); });
-    r[1].docs.forEach(function(d){ var o=d.data(); if(o.da==='magazzino' && o.a==='negozio' && o.prodottoId && o.scopo!=='extra') add(o.prodottoId,(tsDate(o.quando)||new Date(0)).getTime(),o.qta|0,false); });   // gli spostamenti «pezzo in più» non contano come rifornimento
+    r[1].docs.forEach(function(d){ var o=d.data(); if(o.da==='magazzino' && o.a==='negozio' && o.prodottoId && o.scopo!=='extra') add(o.prodottoId,(tsDate(o.quandoLocale)||tsDate(o.quando)||new Date(0)).getTime(),o.qta|0,false); });   // gli spostamenti «pezzo in più» non contano come rifornimento
     var F=firebase.firestore.FieldValue, b=fdb.batch(), added=0, lines=0;
     Object.keys(rif).forEach(function(id){ if(!ev[id]) ev[id]=[]; });   // righe rimaste in lista senza vendite nel periodo (es. contate da un ricalcolo più largo): si azzerano
     Object.keys(ev).forEach(function(id){
@@ -1984,7 +1986,9 @@ function srRender(){
 }
 function openSerie(preset){
   srLoad(); if(preset){ sr.dir='mn'; sr.lines=preset; srSave(); }
-  sr.who=null; $('#srQ').value=''; $('#srRes').innerHTML=''; $('#srErr').textContent=''; srRender(); $('#srOv').classList.add('show');
+  sr.who=null; $('#srQ').value=''; $('#srRes').innerHTML=''; $('#srErr').textContent='';
+  $('#srDateRow').classList.toggle('hidden',role!=='titolare'); if(role==='titolare') moveDateInit('#srDate');
+  srRender(); $('#srOv').classList.add('show');
   setTimeout(function(){ $('#srQ').focus(); },60);
 }
 $('#srClose').onclick=function(){ $('#srOv').classList.remove('show'); };
@@ -2027,6 +2031,8 @@ $('#srWho').addEventListener('click',function(e){
   if(e.target.id==='srChangeWho'){ sesClear(); sr.who=null; srRender(); return; }
   var b=e.target.closest('.chip'); if(!b) return; sr.who=whoChoices().filter(function(s){ return s.id===b.dataset.id; })[0]||null; srRender();
 });
+$('#srToday').onclick=function(){ $('#srDate').value=isoDay(new Date()); };
+$('#mvToday').onclick=function(){ $('#mvDate').value=isoDay(new Date()); };
 $('#srGo').onclick=function(){
   if(!sr.who || !sr.lines.length) return;
   if(role==='titolare'){ sesSet(sr.who); srDo(); return; }
@@ -2038,6 +2044,7 @@ function srDo(){
   var dir=sr.dir, from=dir==='mn'?'magazzino':'negozio', to=dir==='mn'?'negozio':'magazzino', fFrom=NOMEQ[from], fTo=NOMEQ[to], who=sr.who, F=firebase.firestore.FieldValue;
   var lines=sr.lines.filter(function(l){ return l.qta>0 && byId[l.id]; }).map(function(l){ return {id:l.id,n:l.qta,p:byId[l.id],extra:!!(l.extra && dir==='mn' && rif[l.id])}; });
   if(!lines.length) return;
+  var md=moveDateRead('#srDate'); if(!md.ok){ $('#srErr').textContent='La data non è valida: scegli un giorno fino a oggi (non oltre 45 giorni fa).'; return; }
   sr.busy=true; srRender(); $('#srErr').textContent='';
   // Tutto in un'unica operazione sul database: per ogni articolo la quantità viene riletta nel momento dello spostamento.
   // Se per un articolo non bastano più i pezzi (altro tablet), quell'articolo viene saltato e gli altri vanno a buon fine.
@@ -2050,14 +2057,14 @@ function srDo(){
         if(x.n<1 || have<x.n){ skipped.push({id:x.id,why:'ora '+srSrc()+' ce ne sono '+have}); return; }
         var upd={aggiornatoIl:F.serverTimestamp()}; upd[fFrom]=have-x.n; upd[fTo]=(d[fTo]|0)+x.n;
         tx.update(fdb.doc('prodotti/'+x.id),upd);
-        var mrec={prodottoId:x.id,prodottoNome:x.p.nome,codice:x.p.codiceProdotto||'',da:from,a:to,qta:x.n,staffId:who.id,staffNome:who.nome,ruolo:role,quando:F.serverTimestamp()}; if(x.extra) mrec.scopo='extra'; tx.set(fdb.collection('movimenti').doc(),mrec);
+        var mrec={prodottoId:x.id,prodottoNome:x.p.nome,codice:x.p.codiceProdotto||'',da:from,a:to,qta:x.n,staffId:who.id,staffNome:who.nome,ruolo:role,quando:F.serverTimestamp()}; if(x.extra) mrec.scopo='extra'; if(md.when) mrec.quandoLocale=firebase.firestore.Timestamp.fromDate(md.when); tx.set(fdb.collection('movimenti').doc(),mrec);
         done.push(x);
       });
       return {done:done,skipped:skipped};
     });
   }).then(function(res){
     sr.busy=false; sesTouch();
-    var okIds={}; res.done.forEach(function(x){ okIds[x.id]=x; if(dir==='mn' && !x.extra) rifDec(x.id,x.n); });
+    var okIds={}; res.done.forEach(function(x){ okIds[x.id]=x; if(dir==='mn' && !x.extra && !md.when) rifDec(x.id,x.n); });
     sr.lines=sr.lines.filter(function(l){ return !okIds[l.id]; });
     sr.skipped={}; res.skipped.forEach(function(k){ sr.skipped[k.id]=k.why; });
     srSave(); srRender();
@@ -2084,6 +2091,7 @@ function bestDir(p){ return ((p.qtaMagazzino|0)>0 || !((p.qtaNegozio|0)>0)) ? 'm
 function openMove(p){
   mv={prod:p||null,dir:p?bestDir(p):'mn',qty:1,who:null,extra:false};
   $('#mvQ').value=''; $('#mvRes').innerHTML=''; $('#mvErr').textContent='';
+  $('#mvDateRow').classList.toggle('hidden',role!=='titolare'); if(role==='titolare') moveDateInit('#mvDate');
   renderMove(); $('#moveOv').classList.add('show'); if(!p) setTimeout(function(){ $('#mvQ').focus(); },50);
 }
 function renderMove(){
@@ -2176,6 +2184,7 @@ function doMove(){
   var p=mv.prod, n=mv.qty|0, from=mv.dir==='mn'?'magazzino':'negozio', to=mv.dir==='mn'?'negozio':'magazzino', extra=!!(mv.extra && mv.dir==='mn' && rif[p.id]);
   var fFrom='qta'+from.charAt(0).toUpperCase()+from.slice(1), fTo='qta'+to.charAt(0).toUpperCase()+to.slice(1);
   var F=firebase.firestore.FieldValue, pref=fdb.doc('prodotti/'+p.id), mref=fdb.collection('movimenti').doc();
+  var md=moveDateRead('#mvDate'); if(!md.ok){ $('#mvErr').textContent='La data non è valida: scegli un giorno fino a oggi (non oltre 45 giorni fa).'; return; }
   var go=$('#mvGo'); go.disabled=true; $('#mvErr').textContent='';
   var finished=false, msg=n+' × '+p.nome+': '+from+' → '+to+'.', waitT=setTimeout(function(){ if(!finished) $('#mvErr').textContent='In attesa della connessione… non ripetere lo spostamento.'; },8000);
   // La quantità viene riletta e controllata nel database nel momento dello spostamento: così non si possono spostare pezzi che non ci sono,
@@ -2187,11 +2196,11 @@ function doMove(){
       if(n<1 || have<n) throw {code:'not-enough',have:have};
       var upd={aggiornatoIl:F.serverTimestamp()}; upd[fFrom]=have-n; upd[fTo]=(d[fTo]|0)+n;
       tx.update(pref,upd);
-      var mrec={prodottoId:p.id,prodottoNome:p.nome,codice:p.codiceProdotto||'',da:from,a:to,qta:n,staffId:mv.who.id,staffNome:mv.who.nome,ruolo:role,quando:F.serverTimestamp()}; if(extra) mrec.scopo='extra'; tx.set(mref,mrec);
+      var mrec={prodottoId:p.id,prodottoNome:p.nome,codice:p.codiceProdotto||'',da:from,a:to,qta:n,staffId:mv.who.id,staffNome:mv.who.nome,ruolo:role,quando:F.serverTimestamp()}; if(extra) mrec.scopo='extra'; if(md.when) mrec.quandoLocale=firebase.firestore.Timestamp.fromDate(md.when); tx.set(mref,mrec);
     });
   }).then(function(){
-    clearTimeout(waitT); finished=true; $('#moveOv').classList.remove('show'); mv=null; toast('Spostato — '+msg);
-    sesTouch(); if(from==='magazzino' && !extra) rifDec(p.id,n);
+    clearTimeout(waitT); finished=true; $('#moveOv').classList.remove('show'); mv=null; toast('Spostato — '+msg+(md.when?' (del '+itDate(md.day)+')':''));
+    sesTouch(); if(from==='magazzino' && !extra && !md.when) rifDec(p.id,n);   // uno spostamento di un altro giorno non tocca la lista di oggi: lo conta il ricalcolo (rifBuild) all'ora vera
   }).catch(function(er){
     clearTimeout(waitT); finished=true; go.disabled=false; console.warn('sposta:',er&&er.code);
     var code=er&&er.code, label=from==='magazzino'?'Magazzino':'Negozio';
@@ -2252,7 +2261,11 @@ function loadProdHistory(id){
 var car=null;
 // Data scelta (aaaa-mm-gg) → momento da registrare: oggi = adesso; un altro giorno = mezzogiorno di quel giorno
 function whenFromDay(iso){ return (!iso || iso===isoDay(new Date())) ? new Date() : new Date(iso+'T12:00:00'); }
-function dayOk(iso){ if(!/^\d{4}-\d{2}-\d{2}$/.test(iso||'')) return false; var t=isoDay(new Date()), lo=new Date(); lo.setDate(lo.getDate()-365); return iso<=t && iso>=isoDay(lo); }
+function dayOk(iso,max){ if(!/^\d{4}-\d{2}-\d{2}$/.test(iso||'')) return false; var t=isoDay(new Date()), lo=new Date(); lo.setDate(lo.getDate()-(max||365)); return iso<=t && iso>=isoDay(lo); }
+// Data degli spostamenti (solo titolare): fino a 45 giorni indietro, come consentono le regole del database
+var MOVE_BACK=45;
+function moveDateInit(id){ var el=$(id), lo=new Date(); lo.setDate(lo.getDate()-MOVE_BACK); el.max=isoDay(new Date()); el.min=isoDay(lo); el.value=isoDay(new Date()); }
+function moveDateRead(id){ if(role!=='titolare') return {ok:true,when:null}; var d=$(id).value||isoDay(new Date()); if(!dayOk(d,MOVE_BACK)) return {ok:false}; return {ok:true,when:d===isoDay(new Date())?null:whenFromDay(d),day:d}; }
 function openCarico(p){
   car={prod:p,qty:1,dest:'magazzino',who:null};
   var w=whoChoices(); car.who=w[0]||null;
