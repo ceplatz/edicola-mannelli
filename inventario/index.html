@@ -834,6 +834,15 @@ table.it .cd{font-size:11px;color:var(--espresso-2)}
 </div></div>
 
 <!-- Da ricontare: articoli con giacenza negativa o segnati «da ricontare» (titolare) -->
+<!-- Cestino (titolare): articoli eliminati, ripristinabili -->
+<div class="ov" id="trOv" style="z-index:5300"><div class="sheet wide">
+  <h3>🗑️ Cestino</h3>
+  <p class="hint" style="margin:2px 0 8px">Gli articoli eliminati restano qui con le loro quantità, foto e storico. «Ripristina» li rimette in elenco com'erano.</p>
+  <input id="trQ" placeholder="Cerca tra gli eliminati…" autocomplete="off" inputmode="search">
+  <div id="trList"></div>
+  <div class="ferr" id="trErr"></div>
+  <div class="acts"><button type="button" class="btn" id="trClose">Chiudi</button></div>
+</div></div>
 <div class="ov" id="rcOv" style="z-index:5300"><div class="sheet wide">
   <h3>🔢 Da ricontare</h3>
   <div class="hint" id="rcHint" style="margin:-2px 0 10px">Articoli con una quantità sotto zero (una vendita è passata quando il conteggio diceva zero) o segnati «da ricontare». Conta i pezzi veri e scrivi i numeri: la correzione resta nel registro.</div>
@@ -1009,7 +1018,7 @@ setTimeout(function(){ $('#splash').classList.add('hide'); }, viridianMs + 1300)
 setTimeout(function(){ $('#splash').style.display='none'; }, viridianMs + 1900);
 
 /* ── Firebase ── */
-var auth=null, fdb=null, role=null, products=[], unsub=null, byId={}, rif={}, rifDa={}, unsubRif=null;
+var auth=null, fdb=null, role=null, products=[], trash=[], unsub=null, byId={}, rif={}, rifDa={}, unsubRif=null;
 function fbReady(){ return typeof firebase!=='undefined'; }
 function fbInit(){
   if(!fbReady()) return false;
@@ -1109,6 +1118,7 @@ function buildTiles(){
     t.push({e:'📋',n:'Registro movimenti',d:'Chi ha spostato cosa e quando',act:openLog});
     t.push({e:'📈',n:'Oggi',d:'Vendite in diretta e chiusura giornata',act:openOggi});
     t.push({e:'📊',n:'Report',d:'Valore, margini, più venduti',act:openReport});
+    t.push({e:'🗑️',n:'Cestino',d:'Articoli eliminati: si possono ripristinare',k:'tr',act:openTrash});
     t.push({e:'🧾',n:'Fatture',d:'Fatture e ricevute scansionate',act:openFatture});
     t.push({e:'⚙️',n:'Impostazioni',d:'Personale, PIN e distributori',act:openSettings});
   }
@@ -1127,10 +1137,12 @@ function startProducts(){
   if(unsub) unsub();
   unsub = fdb.collection('prodotti').onSnapshot({includeMetadataChanges:true}, function(snap){
     net.cacheOnly=!!(snap.metadata&&snap.metadata.fromCache); net.pendDocs=snap.docs.filter(function(d){ return d.metadata&&d.metadata.hasPendingWrites; }).length; syncUpdate();
-    products = snap.docs.map(function(d){ var o=d.data(); o.id=d.id; return o; });
+    var all = snap.docs.map(function(d){ var o=d.data(); o.id=d.id; return o; });
+    products = all.filter(function(p){ return !p.eliminatoIl; });   // gli articoli eliminati stanno nel Cestino: fuori da ricerca, vendite, conteggi…
+    trash = all.filter(function(p){ return !!p.eliminatoIl; });
     byId={}; products.forEach(function(p){ byId[p.id]=p; });
     fillCatSelects();
-    renderResults(); rcUi();
+    renderResults(); rcUi(); trUi();
     if(mv && $('#moveOv').classList.contains('show')) renderMove();
     if($('#srOv').classList.contains('show')) srRender();
   }, function(err){
@@ -1400,9 +1412,10 @@ pf.daRicontare.addEventListener('change',function(){ pf.ricontareNota.classList.
 $('#formCancel').onclick=function(){ $('#formOv').classList.remove('show'); };
 $('#scanForm').onclick=function(){ scan().then(function(c){ if(c){ pf.barcode.value=c; bcBtns(); } }); };
 $('#delBtn').onclick=function(){
-  var p=byId[editingId]; if(!p || !confirm('Eliminare «'+p.nome+'»? L\'operazione non si può annullare.')) return;
-  var b=fdb.batch(); b.delete(fdb.doc('prodotti/'+editingId+'/privato/costo')); b.delete(fdb.doc('foto/'+editingId)); b.delete(fdb.doc('prodotti/'+editingId));
-  commitFast(b).then(function(r){ $('#formOv').classList.remove('show'); toast(r.queued?QUEUED_MSG:'Prodotto eliminato.'); }).catch(function(){ $('#ferr').textContent='Eliminazione non riuscita. Riprova.'; });
+  var p=byId[editingId]; if(!p || !confirm('Eliminare «'+p.nome+'»?\nVa nel Cestino: si può ripristinare quando vuoi.')) return;
+  var F=firebase.firestore.FieldValue, b=fdb.batch();   // non si cancella nulla (foto e prezzo di acquisto restano): l'articolo viene solo nascosto
+  b.update(fdb.doc('prodotti/'+editingId),{eliminatoIl:F.serverTimestamp(),eliminatoDa:'Titolare',aggiornatoIl:F.serverTimestamp()});
+  commitFast(b).then(function(r){ $('#formOv').classList.remove('show'); toast(r.queued?QUEUED_MSG:'Eliminato: lo trovi nel Cestino.'); }).catch(function(){ $('#ferr').textContent='Eliminazione non riuscita. Riprova.'; });
 };
 pf.addEventListener('submit',function(e){
   e.preventDefault();
@@ -1720,6 +1733,38 @@ $('#staffAdd').addEventListener('submit',function(e){
 
 /* ── Da ricontare: giacenze negative o segnate «da ricontare»; l'ultimo conteggio vince e resta nel registro come correzione ── */
 function rcList(){ return products.filter(function(p){ return (p.qtaNegozio|0)<0 || (p.qtaMagazzino|0)<0 || p.daRicontare; }).sort(function(a,b){ return String(a.nome).localeCompare(String(b.nome),'it'); }); }
+/* ── Cestino ── */
+function trUi(){
+  var t=document.querySelector('#tiles .tile[data-k="tr"]');
+  if(t){ var b=t.querySelector('.tbadge'), n=trash.length; if(n&&!b){ b=document.createElement('span'); b.className='tbadge'; t.appendChild(b); } if(b){ if(n) b.textContent=n; else b.remove(); } }
+  if($('#trOv').classList.contains('show')) trRender();
+}
+function openTrash(){ if(role!=='titolare') return; $('#trQ').value=''; $('#trErr').textContent=''; trRender(); $('#trOv').classList.add('show'); }
+function trRender(){
+  var q=norm($('#trQ').value);
+  var list=trash.filter(function(p){ return !q || matches(p,q); }).sort(function(a,b){ var x=tsDate(a.eliminatoIl), y=tsDate(b.eliminatoIl); return (y?y.getTime():Infinity)-(x?x.getTime():Infinity); });
+  $('#trList').innerHTML = list.length ? list.map(function(p){ var d=tsDate(p.eliminatoIl);
+    return '<div class="logrow" data-id="'+esc(p.id)+'" style="align-items:center;gap:10px">'+(p.miniatura?'<img class="thumb" alt="" src="'+esc(p.miniatura)+'">':'')
+      +'<div style="flex:1;min-width:0"><div class="what">'+esc(p.nome)+'</div><div class="hint" style="margin:0">'+esc([p.categoria,distName(p),(p.qtaNegozio|0)+' in negozio · '+(p.qtaMagazzino|0)+' in magazzino','eliminato '+(d?itDate(isoDay(d))+' '+hhmm(d):'adesso')].filter(Boolean).join(' · '))+'</div></div>'
+      +'<button type="button" class="btn p mini" data-a="r">Ripristina</button><button type="button" class="btn mini" data-a="x" aria-label="Elimina per sempre">✕</button></div>'; }).join('')
+    : '<div class="none">'+(trash.length?'Nessun risultato.':'Il cestino è vuoto.')+'</div>';
+}
+$('#trQ').addEventListener('input',trRender);
+$('#trClose').onclick=function(){ $('#trOv').classList.remove('show'); };
+$('#trList').addEventListener('click',function(e){
+  var b=e.target.closest('[data-a]'); if(!b) return; var id=b.closest('.logrow').dataset.id, p=trash.filter(function(x){ return x.id===id; })[0]; if(!p) return;
+  var F=firebase.firestore.FieldValue, bt=fdb.batch(); $('#trErr').textContent='';
+  if(b.dataset.a==='r'){
+    var dup=null; CODE_KEYS.forEach(function(k){ if(p[k] && !dup) products.forEach(function(o){ if(o[k]===p[k]) dup={k:k,o:o}; }); });
+    if(dup){ $('#trErr').textContent='Non si può ripristinare «'+p.nome+'»: '+(dup.k==='barcode'?'il codice a barre':'il codice prodotto')+' è già usato da «'+dup.o.nome+'». Cambia uno dei due e riprova.'; return; }
+    bt.update(fdb.doc('prodotti/'+id),{eliminatoIl:F.delete(),eliminatoDa:F.delete(),aggiornatoIl:F.serverTimestamp()});
+    commitFast(bt).then(function(r){ toast(r.queued?QUEUED_MSG:'Ripristinato: «'+p.nome+'» è di nuovo in elenco.'); }).catch(function(){ $('#trErr').textContent='Ripristino non riuscito. Riprova.'; });
+  } else {
+    if(!confirm('Eliminare «'+p.nome+'» PER SEMPRE?\nQuesta volta non si può più ripristinare (restano solo le righe nel Registro).')) return;
+    bt.delete(fdb.doc('prodotti/'+id+'/privato/costo')); bt.delete(fdb.doc('foto/'+id)); bt.delete(fdb.doc('prodotti/'+id));
+    commitFast(bt).then(function(r){ toast(r.queued?QUEUED_MSG:'Eliminato per sempre.'); }).catch(function(){ $('#trErr').textContent='Eliminazione non riuscita. Riprova.'; });
+  }
+});
 function rcUi(){
   var t=document.querySelector('#tiles .tile[data-k="rc"]');
   if(t){ var b=t.querySelector('.tbadge'), n=rcList().length; if(n&&!b){ b=document.createElement('span'); b.className='tbadge'; t.appendChild(b); } if(b){ if(n) b.textContent=n; else b.remove(); } }
