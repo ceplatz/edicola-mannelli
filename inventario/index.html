@@ -1159,12 +1159,15 @@ var KID_RX=new RegExp('^(.*\\b(?:'+KID_WORD+')\\b.*?)\\s+(?:[–—\\-]\\s*)?(\\
 var KID_TERM=new RegExp('^(?:'+KID_WORD+')$');
 // Taglia scritta senza trattino («Felpa ricamata blu 3XL»): vale per XS/XL/XXL/3XL…; S/M/L da sole senza trattino solo se esiste già un gruppo con lo stesso nome (vedi isGroup).
 var SIZE_RX2=/^(.*\S)\s+(XXS|XS|XL|XXL|XXXL|[2-5]XL)\s*$/i, SIZE_RX3=/^(.*\S)\s+(S|M|L)\s*$/i;
+var CLOTHES_RX=/\b(maglia|maglie|t-?shirt|felpa|felpe|polo|tuta|body|pigiama|giacca|giubbino)\b/i;
 function isGroup(g){ return g.length>=2 && g.some(function(x){ return !sizeInfo(x).loose; }); }
 function sizeInfo(p){
   var n=String(p.nome||'').trim(), m=SIZE_RX.exec(n); if(m) return {base:m[1].trim(), size:m[2].toUpperCase()};
   m=SIZE_RX2.exec(n); if(m) return {base:m[1].trim(), size:m[2].toUpperCase()};
   m=SIZE_RX3.exec(n); if(m) return {base:m[1].trim(), size:m[2].toUpperCase(), loose:true};
   m=KID_RX.exec(n); if(m){ var pr=m[2].split(/[–—\-]/).map(function(x){ return +x; }); if(pr.every(function(x){ return x<=16; })) return {base:m[1].trim(), size:pr.join('-')}; }   // «4» oppure «3-4»
+  // Taglie bimbo senza la parola «bimbo» («Maglia Inter 8», «Maglia Inter 10»): un numero 2–16 in fondo a un capo di abbigliamento. Formano un gruppo a parte («… bimbo»), non si mescolano con S/M/L/XL degli adulti.
+  m=/^(.*\S)\s+(?:[–—\-]\s*)?(\d{1,2})\s*$/.exec(n); if(m && +m[2]>=2 && +m[2]<=16 && CLOTHES_RX.test(m[1])) return {base:m[1].trim()+' bimbo', size:String(+m[2])};
   return null;
 }
 function sizeKey(si){ return /^\d+(-\d+)?$/.test(si.size) ? parseInt(si.size,10)+(si.size.indexOf('-')>0?0.5:0) : 100+SIZE_ORDER.indexOf(si.size); }
